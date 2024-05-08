@@ -3,6 +3,8 @@ permalink: /about/
 title: "About"
 ---
 
-Tempor velit sint sunt ipsum tempor enim ad qui ullamco. Est dolore anim ad velit duis dolore minim sunt aliquip amet commodo labore. Ut eu pariatur aute ea aute excepteur laborum. Esse ea esse excepteur minim mollit qui cillum excepteur ex dolore magna. Labore deserunt fugiat incididunt incididunt sint ea. Consequat dolore aute laboris quis proident quis non et est consectetur ex eiusmod sit culpa.
+I am a Data Engineer by [eWolff in the Dr. Wolff group](https://www.drwolffgroup.com/). There I work together with different teams to acquire and prepare the data for analyses. On a given day I may be discussing about structuring data from and for different stakeholders, developing automatic pipeline for extracting and loading data, coordinating different tasks, transforming the data, or exploring the data in order to gain an understanding in their relationship.
 
-Cupidatat ea do et in excepteur in. Ad nostrud ut est esse eu duis ea sunt eiusmod. Aliquip tempor veniam sint elit fugiat. Velit incididunt laboris amet incididunt labore dolore irure velit excepteur commodo deserunt laborum. Consectetur eu fugiat veniam veniam Lorem labore magna eiusmod. Ea occaecat reprehenderit pariatur consectetur minim labore ut aliquip.
+On the data/programing related side, I play with data questioning different habits, reasoning, or playing with different creative or analytic pipeline.
+
+Beside, I am a fervant bike rider and like training for dancing shows.
