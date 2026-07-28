@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Earnings Payback Simulator</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --ink: #2c2c2c;
+            --muted: #6b6b6b;
+            --rule: #d8d8d8;
+            --accent: #3d5a80;
+            --line-3: #8c4a3a;
+            --line-5: #8a6d3b;
+            --line-10: #3d6b4f;
+            --line-15: #5a5a5a;
+            --line-custom: #3d5a80;
+            --line-price: #1a1a1a;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            font-family: Georgia, "Times New Roman", Times, serif;
+            max-width: 820px;
+            margin: 0 auto;
+            padding: 4px 2px 12px;
+            background: transparent;
+            color: var(--ink);
+            font-size: 15px;
+            line-height: 1.45;
+        }
+
+        .intro {
+            color: var(--muted);
+            font-size: 0.92em;
+            margin: 0 0 18px;
+        }
+
+        .controls {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px 28px;
+            margin-bottom: 22px;
+            padding-bottom: 18px;
+            border-bottom: 1px solid var(--rule);
+        }
+
+        @media (max-width: 560px) {
+            .controls { grid-template-columns: 1fr; }
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        label {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            gap: 12px;
+            font-size: 0.95em;
+        }
+
+        .value {
+            font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+            font-size: 0.95em;
+            color: var(--ink);
+            font-variant-numeric: tabular-nums;
+        }
+
+        input[type="range"] {
+            width: 100%;
+            cursor: pointer;
+            accent-color: var(--accent);
+        }
+
+        .requirements {
+            margin: 0 0 22px;
+            padding: 0;
+            list-style: none;
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px 16px;
+        }
+
+        @media (max-width: 560px) {
+            .requirements { grid-template-columns: 1fr 1fr; }
+        }
+
+        .requirements li {
+            margin: 0;
+            padding: 0;
+        }
+
+        .requirements .horizon {
+            display: block;
+            font-size: 0.82em;
+            color: var(--muted);
+            margin-bottom: 2px;
+        }
+
+        .requirements .rate {
+            font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+            font-size: 1.15em;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .requirements .c3 .rate { color: var(--line-3); }
+        .requirements .c5 .rate { color: var(--line-5); }
+        .requirements .c10 .rate { color: var(--line-10); }
+        .requirements .c15 .rate { color: var(--line-15); }
+
+        .note {
+            font-size: 0.82em;
+            color: var(--muted);
+            margin: -12px 0 18px;
+        }
+
+        .chart-container {
+            position: relative;
+            height: 420px;
+            width: 100%;
+        }
+    </style>
+</head>
+<body>
+
+    <p class="intro">Annual earnings growth needed to earn back the purchase price by each horizon. Drag the sliders to try other multiples or growth paths.</p>
+
+    <div class="controls">
+        <div class="control-group">
+            <label for="pe-slider">Target P/E <span id="pe-val" class="value">35×</span></label>
+            <input type="range" id="pe-slider" min="5" max="200" step="1" value="35">
+        </div>
+        <div class="control-group">
+            <label for="g-slider">Your growth guess <span id="g-val" class="value">10%</span></label>
+            <input type="range" id="g-slider" min="-20" max="80" step="1" value="10">
+        </div>
+    </div>
+
+    <ul class="requirements" aria-label="Required growth by horizon">
+        <li class="c3"><span class="horizon">in 3 years</span><span id="req-3y" class="rate">—</span></li>
+        <li class="c5"><span class="horizon">in 5 years</span><span id="req-5y" class="rate">—</span></li>
+        <li class="c10"><span class="horizon">in 10 years</span><span id="req-10y" class="rate">—</span></li>
+        <li class="c15"><span class="horizon">in 15 years</span><span id="req-15y" class="rate">—</span></li>
+    </ul>
+    <p class="note">Negative rates mean earnings can shrink and still pay back within that window.</p>
+
+    <div class="chart-container">
+        <canvas id="paybackChart"></canvas>
+    </div>
+
+    <script>
+        const peSlider = document.getElementById('pe-slider');
+        const gSlider = document.getElementById('g-slider');
+        const peVal = document.getElementById('pe-val');
+        const gVal = document.getElementById('g-val');
+
+        let chartInstance = null;
+
+        function solveForGrowth(targetPE, years) {
+            let low = -0.99;
+            let high = 20.0;
+            let mid = 0;
+
+            for (let i = 0; i < 60; i++) {
+                mid = (low + high) / 2;
+                let calculatedPE = 0;
+
+                if (Math.abs(mid) < 1e-12) {
+                    calculatedPE = years;
+                } else {
+                    calculatedPE = (1 + mid) * (Math.pow(1 + mid, years) - 1) / mid;
+                }
+
+                if (calculatedPE > targetPE) {
+                    high = mid;
+                } else {
+                    low = mid;
+                }
+            }
+            return mid;
+        }
+
+        function generateSeries(g, yearsToCalculate) {
+            const data = [];
+            let current = 0;
+            for (let t = 1; t <= yearsToCalculate; t++) {
+                current += Math.pow(1 + g, t);
+                data.push(current);
+            }
+            return data;
+        }
+
+        function fmtPct(g) {
+            const pct = g * 100;
+            const sign = pct > 0 ? '+' : '';
+            return sign + pct.toFixed(1) + '%';
+        }
+
+        function calculatePayback() {
+            const pe = parseFloat(peSlider.value);
+            const gCustom = parseFloat(gSlider.value) / 100;
+
+            peVal.textContent = pe + '×';
+            gVal.textContent = (gCustom * 100) + '%';
+
+            const g3 = solveForGrowth(pe, 3);
+            const g5 = solveForGrowth(pe, 5);
+            const g10 = solveForGrowth(pe, 10);
+            const g15 = solveForGrowth(pe, 15);
+
+            document.getElementById('req-3y').textContent = fmtPct(g3);
+            document.getElementById('req-5y').textContent = fmtPct(g5);
+            document.getElementById('req-10y').textContent = fmtPct(g10);
+            document.getElementById('req-15y').textContent = fmtPct(g15);
+
+            updateChart(pe, gCustom, [g3, g5, g10, g15]);
+        }
+
+        function updateChart(pe, gCustom, reqGrowths) {
+            const [g3, g5, g10, g15] = reqGrowths;
+            const chartYears = 30;
+            const labels = Array.from({ length: chartYears }, (_, i) => String(i + 1));
+            const priceLine = Array(chartYears).fill(pe);
+            const ink = '#2c2c2c';
+            const muted = '#6b6b6b';
+
+            const ctx = document.getElementById('paybackChart').getContext('2d');
+
+            if (chartInstance) {
+                chartInstance.destroy();
+            }
+
+            chartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: `3y (${fmtPct(g3)})`,
+                            data: generateSeries(g3, chartYears),
+                            borderColor: '#8c4a3a',
+                            backgroundColor: 'transparent',
+                            tension: 0,
+                            pointRadius: 0,
+                            borderWidth: 1.5
+                        },
+                        {
+                            label: `5y (${fmtPct(g5)})`,
+                            data: generateSeries(g5, chartYears),
+                            borderColor: '#8a6d3b',
+                            backgroundColor: 'transparent',
+                            tension: 0,
+                            pointRadius: 0,
+                            borderWidth: 1.5
+                        },
+                        {
+                            label: `10y (${fmtPct(g10)})`,
+                            data: generateSeries(g10, chartYears),
+                            borderColor: '#3d6b4f',
+                            backgroundColor: 'transparent',
+                            tension: 0,
+                            pointRadius: 0,
+                            borderWidth: 1.5
+                        },
+                        {
+                            label: `15y (${fmtPct(g15)})`,
+                            data: generateSeries(g15, chartYears),
+                            borderColor: '#5a5a5a',
+                            backgroundColor: 'transparent',
+                            tension: 0,
+                            pointRadius: 0,
+                            borderWidth: 1.5
+                        },
+                        {
+                            label: `Guess (${fmtPct(gCustom)})`,
+                            data: generateSeries(gCustom, chartYears),
+                            borderColor: '#3d5a80',
+                            borderDash: [5, 4],
+                            backgroundColor: 'transparent',
+                            tension: 0,
+                            pointRadius: 0,
+                            borderWidth: 2
+                        },
+                        {
+                            label: 'Purchase price (P/E)',
+                            data: priceLine,
+                            borderColor: ink,
+                            borderWidth: 1.25,
+                            borderDash: [2, 3],
+                            fill: false,
+                            pointRadius: 0
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    scales: {
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Years',
+                                color: muted,
+                                font: { size: 12, family: 'Georgia, serif', weight: 'normal' }
+                            },
+                            ticks: { color: muted, maxTicksLimit: 10, font: { size: 11 } },
+                            grid: { color: 'rgba(0,0,0,0.04)' }
+                        },
+                        y: {
+                            type: 'logarithmic',
+                            min: 1,
+                            title: {
+                                display: true,
+                                text: 'Cumulative earnings (× purchase price)',
+                                color: muted,
+                                font: { size: 12, family: 'Georgia, serif', weight: 'normal' }
+                            },
+                            ticks: { color: muted, font: { size: 11 } },
+                            grid: { color: 'rgba(0,0,0,0.06)' }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            labels: {
+                                color: ink,
+                                boxWidth: 14,
+                                font: { size: 11, family: 'Georgia, serif' },
+                                padding: 12
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                title: (items) => 'Year ' + items[0].label,
+                                label: (context) => context.dataset.label + ': ' + context.parsed.y.toFixed(1) + '×'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        peSlider.addEventListener('input', calculatePayback);
+        gSlider.addEventListener('input', calculatePayback);
+
+        calculatePayback();
+    </script>
+</body>
+</html>
