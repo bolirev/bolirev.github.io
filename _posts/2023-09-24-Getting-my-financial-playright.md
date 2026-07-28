@@ -1,7 +1,12 @@
-
-# Getting my financial reports with playwright, automatically
-
-Getting my financial reports with playwright, automatically
+---
+title: "Getting my financial reports with playwright, automatically"
+categories:
+  - Blog
+tags:
+  - automation
+  - playwright
+  - python
+---
 
 As an hobbyist in stock market investments with a fervor for data engineering and analysis, I found myself driven to monitor and optimize my financial strategies. To achieve this, I required access to underlying data such as stock quantities, prices, and other relevant information at different time intervals. Initially, I adhered to a Sunday morning routine of manually navigating websites to download the pertinent data. However, this method proved restrictive in terms of analysis and became a hindrance to the enjoyment of my Sunday mornings. Frustrated by these limitations, I decided to automate the entire process.
 
@@ -40,7 +45,7 @@ In this tutorial we will use the sync API because the task neither need to be re
 **Login page or login pages**
 
     from playwright.sync_api import sync_playwright
-    
+
     with sync_playwright() as playwright:
         browser = playwright.firefox # or "firefox" or "webkit".
         browser = browser.launch(headless = False, slow_mo = 50)
@@ -49,7 +54,7 @@ In this tutorial we will use the sync API because the task neither need to be re
         page.goto("https://webtrading.onvista-bank.de/login")
         page.pause()
 
-![](https://cdn-images-1.medium.com/max/3786/1*-6Y_7o25p0YR5qYv2FTj2g.png)
+![](/assets/images/posts/Getting-my-financial-playright/01-55740e86d967.png)
 
 On the left side we have the browser started by playwright and the page it reached. We can see the results because we set headless to False, and ended the example above with a page.pause().
 
@@ -57,7 +62,7 @@ On the right side we have an handy tool provided by playwright. We can click for
 
 There is however a catch on this webpage. From time to time we have a security keyboard blocking the access to the block for login to the page.
 
-![](https://cdn-images-1.medium.com/max/3864/1*A1b4de4QYtNkn-uwrmxhEQ.png)
+![](/assets/images/posts/Getting-my-financial-playright/02-663a910e75a3.png)
 
 We can however attempt to click on the linked once it is displayed.
 
@@ -65,7 +70,7 @@ We can however attempt to click on the linked once it is displayed.
     with sync_playwright() as playwright:
         # (...) page.goto("https://webtrading.onvista-bank.de/login")
         page.wait_for_load_state('networkidle') # To make sure that link is clickable
-        try: 
+        try:
             page.get_by_role("link", name="Sicherheitstastatur ausblenden").click()
         except Exception as e:
             print(e)
@@ -73,12 +78,12 @@ We can however attempt to click on the linked once it is displayed.
 
 **Login with username and password**
 
-![Finding the element for login and password using the webpage inspector](https://cdn-images-1.medium.com/max/3372/1*Yg60BQ5a6_UMuHzlHzy-Rw.png)*Finding the element for login and password using the webpage inspector*
+![Finding the element for login and password using the webpage inspector](/assets/images/posts/Getting-my-financial-playright/03-762dbdac1424.png)*Finding the element for login and password using the webpage inspector*
 
 For login to the webpage, the python script needs to be aware of our login and password. These should be securely stored. For the example below, we will simply store them in a json file named in ‘secrets.config’.
 
-    {"secret": 
-        {"login": "MyLogin", 
+    {"secret":
+        {"login": "MyLogin",
          "password": "MyPassword"}
     }
 
@@ -88,11 +93,11 @@ By using
 
     import json
     from playwright.sync_api import sync_playwright
-    
+
     with open('secrets.config', 'r') as f:
         data = json.load(f)
         secret = data['secret']
-    
+
     with sync_playwright() as playwright:
         browser = playwright.firefox # or "firefox" or "webkit".
         browser = browser.launch(headless = False, slow_mo = 50)
@@ -100,7 +105,7 @@ By using
         page = context.new_page()
         page.goto("https://webtrading.onvista-bank.de/login")
         page.wait_for_load_state('networkidle') # To make sure that link is clickable
-        try: 
+        try:
             page.get_by_role("link", name="Sicherheitstastatur ausblenden").click()
         except Exception as e:
             print(e)
@@ -117,9 +122,9 @@ At that point, I was a bit concerned. But I knew that I don’t need to require 
 
 Indeed comparing the cookies stored before and after the 2FA, we see new ones arrived :)
 
-![Before the 2FA](https://cdn-images-1.medium.com/max/4124/1*6aE_Aa4VAFVIW6a1p8Xd1w.png)*Before the 2FA*
+![Before the 2FA](/assets/images/posts/Getting-my-financial-playright/04-8c99c1f38efe.png)*Before the 2FA*
 
-![After the 2FA](https://cdn-images-1.medium.com/max/4124/1*U--fmZTdik3LzcPRNSIM2Q.png)*After the 2FA*
+![After the 2FA](/assets/images/posts/Getting-my-financial-playright/05-5f01908b75fd.png)*After the 2FA*
 
 One of the two will expire in the future, but in the far-far future (one year) in comparison to every Sundays. Here I did mark the expiration date in my calendar to renew the cookie before a future crash.
 
@@ -135,7 +140,7 @@ Playwright can store and load cookies, so let’s adapt the script to handle coo
     import pickle
     #(...)
     cookie_file = 'secrets.pickle'
-    
+
     with sync_playwright() as playwright:
         #(...) context = browser.new_context()
         if os.path.exists(cookie_file):
@@ -154,7 +159,7 @@ Playwright can store and load cookies, so let’s adapt the script to handle coo
                 pickle.dump(mycookies, handle)
         page.pause()
 
-![](https://cdn-images-1.medium.com/max/3770/1*PJxweVUr6riTiDnjcmkgCw.png)
+![](/assets/images/posts/Getting-my-financial-playright/06-dbf97e7527a1.png)
 
 Hurray it works :) The rest was pretty straight forward. Going to a page and clicking on the correct button.
 
@@ -180,7 +185,7 @@ I needed to install a few packages to make the full down-loader working. The con
     version = "0.1.0"
     description = "My personal downloader for documents"
     authors = ["O. Bertrand <xyz@abs.com>"]
-    
+
     [tool.poetry.dependencies]
     python = "^3.9"
     pytest-playwright = "*"
@@ -188,13 +193,13 @@ I needed to install a few packages to make the full down-loader working. The con
     pandas = "*"
     lxml = "*"
     numpy = "*"
-    
+
     [tool.poetry.group.tutorial]
     optional = true
-    
+
     [tool.poetry.group.tutorial.dependencies]
     jupyter = "*"
-    
+
     [build-system]
     requires = ["poetry-core>=1.2.0"]
     build-backend = "poetry.core.masonry.api"
