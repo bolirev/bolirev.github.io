@@ -58,7 +58,7 @@ plugins:
 author:
   name   : "Olivier Bertrand"
   avatar : "/assets/images/bio-photo.jpg"
-  bio    : "I enjoy deciphering decisions by using data — and eating data for the gut feeling."
+  bio    : "I enjoy creative reasoning and providing a base for it with data"
   links:
     - label: "Email"
       icon: "fas fa-fw fa-envelope-square"

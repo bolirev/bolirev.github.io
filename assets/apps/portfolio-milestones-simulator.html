@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Portfolio Milestones Simulator</title>
+    <style>
+        :root {
+            --ink: #2c2c2c;
+            --muted: #6b6b6b;
+            --rule: #d8d8d8;
+            --accent: #3d5a80;
+            --barista: #3d5a80;
+            --tipping: #8a6d3b;
+            --coast: #4a7c7a;
+            --gains: #6b5b4a;
+            --full-fi: #3d6b4f;
+            --replacer: #8c4a3a;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            font-family: Georgia, "Times New Roman", Times, serif;
+            max-width: 820px;
+            margin: 0 auto;
+            padding: 4px 2px 12px;
+            background: transparent;
+            color: var(--ink);
+            font-size: 15px;
+            line-height: 1.45;
+        }
+
+        .intro {
+            color: var(--muted);
+            font-size: 0.92em;
+            margin: 0 0 18px;
+        }
+
+        .controls {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px 28px;
+            margin-bottom: 22px;
+            padding-bottom: 18px;
+            border-bottom: 1px solid var(--rule);
+        }
+
+        @media (max-width: 560px) {
+            .controls { grid-template-columns: 1fr; }
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        label {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            gap: 12px;
+            font-size: 0.95em;
+        }
+
+        .value {
+            font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+            font-size: 0.95em;
+            color: var(--ink);
+            font-variant-numeric: tabular-nums;
+        }
+
+        input[type="range"] {
+            width: 100%;
+            cursor: pointer;
+            accent-color: var(--accent);
+        }
+
+        .meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px 20px;
+            margin: -6px 0 18px;
+            font-size: 0.88em;
+            color: var(--muted);
+        }
+
+        .meta strong {
+            font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+            font-weight: normal;
+            color: var(--ink);
+            font-variant-numeric: tabular-nums;
+        }
+
+        .milestones {
+            margin: 0 0 22px;
+            padding: 0;
+            list-style: none;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px 16px;
+        }
+
+        @media (max-width: 560px) {
+            .milestones { grid-template-columns: 1fr 1fr; }
+        }
+
+        .milestones li {
+            margin: 0;
+            padding: 0;
+        }
+
+        .milestones .name {
+            display: block;
+            font-size: 0.82em;
+            color: var(--muted);
+            margin-bottom: 2px;
+        }
+
+        .milestones .balance {
+            font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+            font-size: 1.1em;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .milestones .when {
+            display: block;
+            font-size: 0.8em;
+            color: var(--muted);
+            margin-top: 2px;
+        }
+
+        .milestones .barista .balance { color: var(--barista); }
+        .milestones .tipping .balance { color: var(--tipping); }
+        .milestones .coast .balance { color: var(--coast); }
+        .milestones .gains .balance { color: var(--gains); }
+        .milestones .full-fi .balance { color: var(--full-fi); }
+        .milestones .replacer .balance { color: var(--replacer); }
+
+        .note {
+            font-size: 0.82em;
+            color: var(--muted);
+            margin: -12px 0 18px;
+        }
+
+        .chart-container {
+            position: relative;
+            height: 420px;
+            width: 100%;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+    </style>
+</head>
+<body>
+
+    <p class="intro">Portfolio growth versus ratio-based milestones. Drag the sliders to match your income, savings rate, and return assumptions.</p>
+
+    <div class="controls">
+        <div class="control-group">
+            <label for="income-slider">Net monthly income <span id="income-val" class="value">€3,500</span></label>
+            <input type="range" id="income-slider" min="1500" max="10000" step="100" value="3500">
+        </div>
+        <div class="control-group">
+            <label for="savings-slider">Monthly savings <span id="savings-val" class="value">€1,800</span></label>
+            <input type="range" id="savings-slider" min="100" max="8000" step="50" value="1800">
+        </div>
+        <div class="control-group">
+            <label for="return-slider">Nominal return <span id="return-val" class="value">7.0%</span></label>
+            <input type="range" id="return-slider" min="2" max="12" step="0.1" value="7">
+        </div>
+        <div class="control-group">
+            <label for="inflation-slider">Inflation <span id="inflation-val" class="value">2.0%</span></label>
+            <input type="range" id="inflation-slider" min="0" max="6" step="0.1" value="2">
+        </div>
+        <div class="control-group">
+            <label for="saved-slider">Already saved <span id="saved-val" class="value">€0</span></label>
+            <input type="range" id="saved-slider" min="0" max="500000" step="5000" value="0">
+        </div>
+        <div class="control-group">
+            <label for="portfolio-slider">Portfolio value <span id="portfolio-val" class="value">€0</span></label>
+            <input type="range" id="portfolio-slider" min="0" max="500000" step="5000" value="0">
+        </div>
+        <div class="control-group">
+            <label for="years-slider">Horizon <span id="years-val" class="value">25 years</span></label>
+            <input type="range" id="years-slider" min="10" max="40" step="1" value="25">
+        </div>
+    </div>
+
+    <div class="meta" aria-live="polite">
+        <span>Expenses <strong id="expenses-val">€1,700/mo</strong></span>
+        <span>Savings rate <strong id="rate-val">51.4%</strong></span>
+        <span>Real return <strong id="real-val">5.0%</strong></span>
+        <span>Current gains <strong id="gains-val">€0</strong></span>
+    </div>
+
+    <ul class="milestones" aria-label="Milestone targets">
+        <li class="barista">
+            <span class="name">Barista FI</span>
+            <span id="m-barista" class="balance">—</span>
+            <span id="y-barista" class="when">—</span>
+        </li>
+        <li class="tipping">
+            <span class="name">Tipping Point</span>
+            <span id="m-tipping" class="balance">—</span>
+            <span id="y-tipping" class="when">—</span>
+        </li>
+        <li class="coast">
+            <span class="name">Coast FI</span>
+            <span id="m-coast" class="balance">—</span>
+            <span id="y-coast" class="when">—</span>
+        </li>
+        <li class="gains">
+            <span class="name">Gains = Principal</span>
+            <span id="m-gains" class="balance">—</span>
+            <span id="y-gains" class="when">—</span>
+        </li>
+        <li class="full-fi">
+            <span class="name">Full FI</span>
+            <span id="m-full-fi" class="balance">—</span>
+            <span id="y-full-fi" class="when">—</span>
+        </li>
+        <li class="replacer">
+            <span class="name">Savings Replacer</span>
+            <span id="m-replacer" class="balance">—</span>
+            <span id="y-replacer" class="when">—</span>
+        </li>
+    </ul>
+    <p class="note">Years shown are the first year the projected balance crosses each milestone. Coast FI uses the horizon as years to retirement.</p>
+
+    <div class="chart-container">
+        <canvas id="milestoneChart"></canvas>
+    </div>
+
+<script>
+(function () {
+    const incomeSlider = document.getElementById('income-slider');
+    const savingsSlider = document.getElementById('savings-slider');
+    const returnSlider = document.getElementById('return-slider');
+    const inflationSlider = document.getElementById('inflation-slider');
+    const savedSlider = document.getElementById('saved-slider');
+    const portfolioSlider = document.getElementById('portfolio-slider');
+    const yearsSlider = document.getElementById('years-slider');
+    const canvas = document.getElementById('milestoneChart');
+
+    const colors = {
+        ink: '#2c2c2c',
+        muted: '#6b6b6b',
+        rule: '#d8d8d8',
+        grid: 'rgba(0,0,0,0.06)',
+        portfolio: '#3d5a80',
+        barista: '#3d5a80',
+        tipping: '#8a6d3b',
+        coast: '#4a7c7a',
+        gains: '#6b5b4a',
+        fullFi: '#3d6b4f',
+        replacer: '#8c4a3a'
+    };
+
+    function fmtEuro(n) {
+        return '€' + Math.round(n).toLocaleString('en-US');
+    }
+
+    function fmtEuroK(n) {
+        if (n >= 1000000) return '€' + (n / 1000000).toFixed(1) + 'M';
+        return '€' + Math.round(n / 1000) + 'k';
+    }
+
+    function fmtPct(n) {
+        return n.toFixed(1) + '%';
+    }
+
+    function yearReached(dataPoints, target) {
+        for (let i = 0; i < dataPoints.length; i++) {
+            if (dataPoints[i].balance >= target) return dataPoints[i].year;
+        }
+        return null;
+    }
+
+    /** Fractional year where the series first crosses target; null if never. */
+    function crossingYear(dataPoints, target) {
+        if (dataPoints[0].balance >= target) return 0;
+        for (let i = 1; i < dataPoints.length; i++) {
+            const prev = dataPoints[i - 1];
+            const curr = dataPoints[i];
+            if (curr.balance >= target) {
+                const span = curr.balance - prev.balance;
+                if (span <= 0) return curr.year;
+                return prev.year + ((target - prev.balance) / span) * (curr.year - prev.year);
+            }
+        }
+        return null;
+    }
+
+    function yearLabel(y) {
+        if (y === null) return 'not within horizon';
+        if (y === 0) return 'already there';
+        return 'year ' + y;
+    }
+
+    function readConfig() {
+        let netIncome = parseFloat(incomeSlider.value);
+        let monthlySavings = parseFloat(savingsSlider.value);
+        if (monthlySavings > netIncome) {
+            monthlySavings = netIncome;
+            savingsSlider.value = String(netIncome);
+        }
+        savingsSlider.max = String(netIncome);
+
+        return {
+            netIncome,
+            monthlySavings,
+            nominalReturn: parseFloat(returnSlider.value) / 100,
+            inflation: parseFloat(inflationSlider.value) / 100,
+            alreadySaved: parseFloat(savedSlider.value),
+            portfolioValue: parseFloat(portfolioSlider.value),
+            years: parseInt(yearsSlider.value, 10)
+        };
+    }
+
+    function buildSeries(config) {
+        const {
+            netIncome,
+            monthlySavings,
+            nominalReturn,
+            inflation,
+            alreadySaved,
+            portfolioValue,
+            years
+        } = config;
+
+        const realReturn = Math.max(nominalReturn - inflation, 0.001);
+        const annualSavings = monthlySavings * 12;
+        const annualExpenses = Math.max(netIncome - monthlySavings, 0) * 12;
+        const fullFi = annualExpenses / 0.04;
+        const coastFi = fullFi / Math.pow(1 + realReturn, years);
+
+        const dataPoints = [];
+        let currentBalance = portfolioValue;
+        let totalDeposited = alreadySaved;
+        dataPoints.push({
+            year: 0,
+            balance: currentBalance,
+            deposited: totalDeposited,
+            gains: currentBalance - totalDeposited
+        });
+
+        for (let y = 1; y <= years; y++) {
+            for (let m = 0; m < 12; m++) {
+                currentBalance = (currentBalance + monthlySavings) * (1 + realReturn / 12);
+                totalDeposited += monthlySavings;
+            }
+            dataPoints.push({
+                year: y,
+                balance: currentBalance,
+                deposited: totalDeposited,
+                gains: currentBalance - totalDeposited
+            });
+        }
+
+        // Gains = Principal: path-dependent; extend past horizon if needed for target/year
+        // Require deposits > 0 so a zeroed portfolio is not treated as already crossed.
+        let gainsEqPrincipalYear = null;
+        let gainsEqPrincipalBalance = null;
+        for (let i = 0; i < dataPoints.length; i++) {
+            if (dataPoints[i].deposited > 0 && dataPoints[i].gains >= dataPoints[i].deposited) {
+                gainsEqPrincipalYear = dataPoints[i].year;
+                gainsEqPrincipalBalance = dataPoints[i].balance;
+                break;
+            }
+        }
+        if (gainsEqPrincipalYear === null && monthlySavings > 0) {
+            let bal = currentBalance;
+            let dep = totalDeposited;
+            for (let y = years + 1; y <= 100; y++) {
+                for (let m = 0; m < 12; m++) {
+                    bal = (bal + monthlySavings) * (1 + realReturn / 12);
+                    dep += monthlySavings;
+                }
+                const gains = bal - dep;
+                if (dep > 0 && gains >= dep) {
+                    gainsEqPrincipalYear = y;
+                    gainsEqPrincipalBalance = bal;
+                    break;
+                }
+            }
+        }
+
+        const milestones = [
+            { id: 'barista', name: 'Barista FI', value: (0.50 * annualExpenses) / 0.04, color: colors.barista },
+            { id: 'tipping', name: 'Tipping Point', value: annualSavings / realReturn, color: colors.tipping },
+            { id: 'coast', name: 'Coast FI', value: coastFi, color: colors.coast },
+            {
+                id: 'gains',
+                name: 'Gains = Principal',
+                value: gainsEqPrincipalBalance,
+                color: colors.gains,
+                yearOverride: gainsEqPrincipalYear,
+                chartOnlyIfWithinHorizon: true
+            },
+            { id: 'full-fi', name: 'Full FI', value: fullFi, color: colors.fullFi },
+            { id: 'replacer', name: 'Savings Replacer', value: annualSavings / 0.04, color: colors.replacer }
+        ];
+
+        return {
+            realReturn,
+            annualSavings,
+            annualExpenses,
+            monthlyExpenses: annualExpenses / 12,
+            savingsRate: netIncome > 0 ? (monthlySavings / netIncome) * 100 : 0,
+            currentGains: portfolioValue - alreadySaved,
+            milestones,
+            dataPoints,
+            years
+        };
+    }
+
+    function updateLabels(config, model) {
+        document.getElementById('income-val').textContent = fmtEuro(config.netIncome);
+        document.getElementById('savings-val').textContent = fmtEuro(config.monthlySavings);
+        document.getElementById('return-val').textContent = fmtPct(config.nominalReturn * 100);
+        document.getElementById('inflation-val').textContent = fmtPct(config.inflation * 100);
+        document.getElementById('saved-val').textContent = fmtEuro(config.alreadySaved);
+        document.getElementById('portfolio-val').textContent = fmtEuro(config.portfolioValue);
+        document.getElementById('years-val').textContent = config.years + ' years';
+
+        document.getElementById('expenses-val').textContent = fmtEuro(model.monthlyExpenses) + '/mo';
+        document.getElementById('rate-val').textContent = fmtPct(model.savingsRate);
+        document.getElementById('real-val').textContent = fmtPct(model.realReturn * 100);
+        document.getElementById('gains-val').textContent = fmtEuro(model.currentGains);
+
+        model.milestones.forEach(m => {
+            const balEl = document.getElementById('m-' + m.id);
+            const yearEl = document.getElementById('y-' + m.id);
+            if (m.value == null) {
+                balEl.textContent = '—';
+                yearEl.textContent = 'not within horizon';
+                return;
+            }
+            balEl.textContent = fmtEuroK(m.value);
+            const y = m.yearOverride !== undefined
+                ? m.yearOverride
+                : yearReached(model.dataPoints, m.value);
+            yearEl.textContent = yearLabel(y);
+        });
+    }
+
+    function resizeCanvas() {
+        const parent = canvas.parentElement;
+        const dpr = window.devicePixelRatio || 1;
+        const cssWidth = parent.clientWidth;
+        const cssHeight = parent.clientHeight;
+        canvas.width = Math.floor(cssWidth * dpr);
+        canvas.height = Math.floor(cssHeight * dpr);
+        canvas.style.width = cssWidth + 'px';
+        canvas.style.height = cssHeight + 'px';
+        const ctx = canvas.getContext('2d');
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        return { width: cssWidth, height: cssHeight, ctx };
+    }
+
+    function renderChart(model) {
+        const { width, height, ctx } = resizeCanvas();
+        const padding = { top: 36, right: 16, bottom: 48, left: 58 };
+        const graphWidth = width - padding.left - padding.right;
+        const graphHeight = height - padding.top - padding.bottom;
+        const { milestones, dataPoints, years } = model;
+        const baseline = height - padding.bottom;
+
+        const chartMilestones = milestones.filter(m => {
+            if (m.value == null) return false;
+            if (m.chartOnlyIfWithinHorizon && (m.yearOverride == null || m.yearOverride > years)) {
+                return false;
+            }
+            return true;
+        });
+        const maxMilestone = Math.max(...chartMilestones.map(m => m.value), 1);
+        const maxBalance = dataPoints[dataPoints.length - 1].balance;
+        const yMax = Math.max(maxMilestone, maxBalance) * 1.12;
+
+        const getX = (year) => padding.left + (year / years) * graphWidth;
+        const getY = (val) => baseline - (val / yMax) * graphHeight;
+
+        ctx.clearRect(0, 0, width, height);
+
+        // Grid + Y labels
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = colors.grid;
+        ctx.fillStyle = colors.muted;
+        ctx.font = '11px ui-monospace, SF Mono, Menlo, Consolas, monospace';
+        ctx.textAlign = 'right';
+
+        const yGridSteps = 5;
+        for (let i = 0; i <= yGridSteps; i++) {
+            const val = (yMax / yGridSteps) * i;
+            const yPos = getY(val);
+            ctx.beginPath();
+            ctx.moveTo(padding.left, yPos);
+            ctx.lineTo(width - padding.right, yPos);
+            ctx.stroke();
+            ctx.fillText(fmtEuroK(val), padding.left - 8, yPos + 4);
+        }
+
+        // Area fill
+        const gradient = ctx.createLinearGradient(0, getY(yMax), 0, getY(0));
+        gradient.addColorStop(0, 'rgba(61, 90, 128, 0.22)');
+        gradient.addColorStop(1, 'rgba(61, 90, 128, 0.0)');
+
+        ctx.beginPath();
+        ctx.moveTo(getX(0), getY(0));
+        dataPoints.forEach(pt => ctx.lineTo(getX(pt.year), getY(pt.balance)));
+        ctx.lineTo(getX(years), getY(0));
+        ctx.closePath();
+        ctx.fillStyle = gradient;
+        ctx.fill();
+
+        // Portfolio line
+        ctx.beginPath();
+        ctx.strokeStyle = colors.portfolio;
+        ctx.lineWidth = 2.25;
+        dataPoints.forEach((pt, index) => {
+            if (index === 0) ctx.moveTo(getX(pt.year), getY(pt.balance));
+            else ctx.lineTo(getX(pt.year), getY(pt.balance));
+        });
+        ctx.stroke();
+
+        // Milestone L-shapes: horizontal from left to the curve, then vertical down to that year
+        const marked = chartMilestones.map(m => {
+            let cross = m.yearOverride !== undefined
+                ? (m.yearOverride != null && m.yearOverride <= years ? m.yearOverride : null)
+                : crossingYear(dataPoints, m.value);
+            // Path-dependent milestones use whole years; keep chart aligned
+            if (m.yearOverride !== undefined && cross !== null) {
+                cross = Math.min(cross, years);
+            }
+            return {
+                ...m,
+                yPos: getY(m.value),
+                cross,
+                crossX: cross === null ? null : getX(cross)
+            };
+        });
+
+        // Nudge bottom year-labels apart when crossings are close
+        const reached = marked
+            .filter(m => m.cross !== null)
+            .sort((a, b) => a.cross - b.cross);
+        const minLabelGap = 36;
+        reached.forEach((m, i) => {
+            m.labelX = m.crossX;
+            if (i > 0 && m.labelX - reached[i - 1].labelX < minLabelGap) {
+                m.labelX = reached[i - 1].labelX + minLabelGap;
+            }
+        });
+
+        marked.forEach(m => {
+            ctx.save();
+            ctx.strokeStyle = m.color;
+            ctx.globalAlpha = 0.85;
+            ctx.lineWidth = 1.25;
+            ctx.setLineDash([4, 4]);
+
+            if (m.cross !== null) {
+                // L: left → curve → down to x-axis
+                ctx.beginPath();
+                ctx.moveTo(padding.left, m.yPos);
+                ctx.lineTo(m.crossX, m.yPos);
+                ctx.lineTo(m.crossX, baseline);
+                ctx.stroke();
+
+                ctx.setLineDash([]);
+                ctx.globalAlpha = 1;
+                ctx.beginPath();
+                ctx.fillStyle = m.color;
+                ctx.arc(m.crossX, m.yPos, 3.5, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Soft leader if year label was nudged away from the vertical
+                if (Math.abs(m.labelX - m.crossX) > 1) {
+                    ctx.beginPath();
+                    ctx.strokeStyle = m.color;
+                    ctx.globalAlpha = 0.4;
+                    ctx.moveTo(m.crossX, baseline);
+                    ctx.lineTo(m.labelX, baseline + 10);
+                    ctx.stroke();
+                    ctx.globalAlpha = 1;
+                }
+
+                ctx.fillStyle = m.color;
+                ctx.textAlign = 'center';
+                ctx.font = '10px ui-monospace, SF Mono, Menlo, Consolas, monospace';
+                ctx.fillText('yr ' + Math.round(m.cross), m.labelX, baseline + 16);
+            } else {
+                // Not reached: horizontal guide only
+                ctx.beginPath();
+                ctx.moveTo(padding.left, m.yPos);
+                ctx.lineTo(width - padding.right, m.yPos);
+                ctx.stroke();
+            }
+            ctx.restore();
+
+        });
+
+        // Name + target just above each horizontal arm (nudge if levels are close)
+        const named = [...marked].sort((a, b) => a.yPos - b.yPos);
+        named.forEach((m, i) => {
+            let nameY = m.yPos - 5;
+            if (i > 0 && nameY - named[i - 1].nameY < 12) {
+                nameY = Math.max(m.yPos + 12, named[i - 1].nameY + 12);
+            }
+            m.nameY = nameY;
+            ctx.fillStyle = m.color;
+            ctx.textAlign = 'left';
+            ctx.font = 'bold 11px Georgia, "Times New Roman", serif';
+            ctx.fillText(m.name + ' (' + fmtEuroK(m.value) + ')', padding.left + 6, m.nameY);
+        });
+
+        // Regular X ticks (keep above milestone year labels)
+        ctx.fillStyle = colors.muted;
+        ctx.textAlign = 'center';
+        ctx.font = '11px Georgia, "Times New Roman", serif';
+        const step = 5;
+        for (let y = 0; y <= years; y += step) {
+            const xPos = getX(y);
+            ctx.beginPath();
+            ctx.strokeStyle = colors.grid;
+            ctx.lineWidth = 1;
+            ctx.moveTo(xPos, baseline);
+            ctx.lineTo(xPos, baseline + 4);
+            ctx.stroke();
+            // Skip numeric tick if a milestone label sits here
+            const crowded = reached.some(m => Math.abs(m.labelX - xPos) < 22);
+            if (!crowded) {
+                ctx.fillStyle = colors.muted;
+                ctx.fillText(String(y), xPos, baseline + 30);
+            }
+        }
+    }
+
+    function update() {
+        const config = readConfig();
+        const model = buildSeries(config);
+        updateLabels(config, model);
+        renderChart(model);
+    }
+
+    [
+        incomeSlider, savingsSlider, returnSlider,
+        inflationSlider, savedSlider, portfolioSlider, yearsSlider
+    ].forEach(el => el.addEventListener('input', update));
+
+    window.addEventListener('resize', update);
+    update();
+})();
+</script>
+</body>
+</html>
