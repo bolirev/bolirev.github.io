@@ -221,7 +221,7 @@
         <canvas id="stackChart"></canvas>
     </div>
 
-    <p class="section-title">Total €/month vs assumed remaining years (same horizon for all)</p>
+    <p class="section-title">€/month if use ends at the same age from new — a 4-year-old with 2 years left matches a new car with 6</p>
     <div class="chart-container tall">
         <canvas id="lifeChart"></canvas>
     </div>
@@ -292,6 +292,25 @@
             const soh = estimateSoh(car, lambda);
             if (soh <= floor) return 0.25;
             return Math.log(soh / floor) / lambda;
+        }
+
+        /** Age from new at which SoH(t)=exp(−λt) hits the winter floor. */
+        function yearsFromNewToFloor(lambda, floor) {
+            const f = Math.min(0.999, Math.max(1e-4, floor));
+            return Math.log(1 / f) / lambda;
+        }
+
+        function lifeAxisYears(horizon) {
+            const end = Math.round(Math.max(horizon, 0.5) * 10) / 10;
+            const start = end > 4 ? 2 : Math.round(Math.max(0.5, end * 0.4) * 10) / 10;
+            const span = Math.max(end - start, 0.5);
+            const step = span > 50 ? 2 : span > 25 ? 1 : 0.5;
+            const years = [];
+            for (let y = start; y < end - step * 0.2; y += step) {
+                years.push(Math.round(y * 10) / 10);
+            }
+            if (!years.length || years[years.length - 1] < end - 0.05) years.push(end);
+            return years;
         }
 
         function unplannedBand(ageY) {
@@ -376,10 +395,12 @@
             });
 
             const owned = results[0];
+            const horizon = yearsFromNewToFloor(p.lambda, floor);
             document.getElementById('life-note').textContent =
                 'Exponential SoH(t)=exp(−λt), λ=' + p.lambda.toFixed(4) + '/y from SoH@4y=' +
                 (p.soh4 * 100).toFixed(1) + '%. Floor ≈ ' + Math.round(floor * 100) +
-                '% (winter ' + p.winterOk + '/' + p.winterNew + ' km). Cheap used life ≈ ' +
+                '% (winter ' + p.winterOk + '/' + p.winterNew + ' km) → new-pack horizon ≈ ' +
+                horizon.toFixed(1) + 'y. Cheap used life ≈ ' +
                 owned.lifeY.toFixed(1) + 'y · purchase alone ≈ ' + fmtEuro(owned.kauf) + '/mo.';
 
             updateStackChart(results);
@@ -475,19 +496,28 @@
         }
 
         function updateLifeChart(p) {
-            const years = [];
-            for (let y = 2; y <= 16; y += 0.5) years.push(y);
+            // X is age from new when use ends. Years left = that age − current age.
+            // The right edge is the new-pack winter floor, so Winter OK (and fade) move it.
+            const floor = sohFloor(p.winterOk, p.winterNew);
+            const horizon = yearsFromNewToFloor(p.lambda, floor);
+            const years = lifeAxisYears(horizon);
             const labels = years.map(y => y.toFixed(1));
+            const minLeft = years[years.length - 1] > 4 ? 2 : 0.25;
 
             const datasets = CARS.map((car, i) => ({
                 label: car.label,
-                data: years.map(y => costsForCar(car, p, y).total),
+                data: years.map(totalY => {
+                    const remaining = totalY - car.ageY;
+                    if (remaining < minLeft) return null;
+                    return costsForCar(car, p, remaining).total;
+                }),
                 borderColor: COLORS[i],
                 backgroundColor: 'transparent',
                 borderWidth: car.owned ? 2.25 : 1.5,
                 borderDash: car.owned ? [] : [4, 3],
                 pointRadius: 0,
-                tension: 0.15
+                tension: 0.15,
+                spanGaps: false
             }));
 
             const ctx = document.getElementById('lifeChart').getContext('2d');
@@ -510,7 +540,7 @@
                         x: {
                             title: {
                                 display: true,
-                                text: 'Assumed remaining years (same for all)',
+                                text: 'Age from new, ending at the winter floor (years)',
                                 color: muted,
                                 font: { size: 12, family: 'Georgia, serif' }
                             },
@@ -539,8 +569,12 @@
                         },
                         tooltip: {
                             callbacks: {
-                                title: (items) => items[0].label + ' years remaining',
-                                label: (ctx) => ctx.dataset.label + ': ' + fmtEuro(ctx.parsed.y) + '/mo'
+                                title: (items) => 'Use ends at age ' + items[0].label + ' from new',
+                                label: (ctx) => {
+                                    const totalY = parseFloat(ctx.label);
+                                    const left = totalY - CARS[ctx.datasetIndex].ageY;
+                                    return ctx.dataset.label + ': ' + fmtEuro(ctx.parsed.y) + '/mo · ' + left.toFixed(1) + 'y left';
+                                }
                             }
                         }
                     }
