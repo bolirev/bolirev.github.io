@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Keeper EV TCO Simulator</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --ink: #2c2c2c;
+            --muted: #6b6b6b;
+            --rule: #d8d8d8;
+            --accent: #3d5a80;
+            --c0: #3d6b4f;
+            --c1: #8a6d3b;
+            --c2: #3d5a80;
+            --c3: #8c4a3a;
+            --kauf: #3d5a80;
+            --sched: #3d6b4f;
+            --unpl: #8a6d3b;
+            --hv: #8c4a3a;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            font-family: Georgia, "Times New Roman", Times, serif;
+            max-width: 820px;
+            margin: 0 auto;
+            padding: 4px 2px 12px;
+            background: transparent;
+            color: var(--ink);
+            font-size: 15px;
+            line-height: 1.45;
+        }
+
+        .intro {
+            color: var(--muted);
+            font-size: 0.92em;
+            margin: 0 0 18px;
+        }
+
+        .controls {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px 28px;
+            margin-bottom: 18px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid var(--rule);
+        }
+
+        @media (max-width: 560px) {
+            .controls { grid-template-columns: 1fr; }
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        label {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            gap: 12px;
+            font-size: 0.95em;
+        }
+
+        .value {
+            font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+            font-size: 0.95em;
+            color: var(--ink);
+            font-variant-numeric: tabular-nums;
+        }
+
+        input[type="range"] {
+            width: 100%;
+            cursor: pointer;
+            accent-color: var(--accent);
+        }
+
+        .check-row {
+            flex-direction: row;
+            align-items: center;
+            gap: 10px;
+            margin-top: 4px;
+        }
+
+        .check-row input {
+            accent-color: var(--accent);
+            width: auto;
+            cursor: pointer;
+        }
+
+        .summary {
+            margin: 0 0 18px;
+            padding: 0;
+            list-style: none;
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px 16px;
+        }
+
+        @media (max-width: 560px) {
+            .summary { grid-template-columns: 1fr 1fr; }
+        }
+
+        .summary li { margin: 0; padding: 0; }
+
+        .summary .name {
+            display: block;
+            font-size: 0.82em;
+            color: var(--muted);
+            margin-bottom: 2px;
+        }
+
+        .summary .rate {
+            font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+            font-size: 1.1em;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .summary .owned .name::after {
+            content: " (bought)";
+            font-size: 0.9em;
+        }
+
+        .summary .c0 .rate { color: var(--c0); }
+        .summary .c1 .rate { color: var(--c1); }
+        .summary .c2 .rate { color: var(--c2); }
+        .summary .c3 .rate { color: var(--c3); }
+
+        .note {
+            font-size: 0.82em;
+            color: var(--muted);
+            margin: -8px 0 16px;
+        }
+
+        .section-title {
+            font-size: 0.95em;
+            margin: 8px 0 10px;
+            color: var(--ink);
+        }
+
+        .chart-container {
+            position: relative;
+            height: 320px;
+            width: 100%;
+            margin-bottom: 22px;
+        }
+
+        .chart-container.tall {
+            height: 360px;
+        }
+
+        .pack-box {
+            margin-top: 8px;
+            padding-top: 16px;
+            border-top: 1px solid var(--rule);
+        }
+
+        .pack-result {
+            font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+            font-size: 0.95em;
+            font-variant-numeric: tabular-nums;
+            margin: 10px 0 0;
+        }
+
+        .pack-result .keep { color: var(--c0); }
+        .pack-result .switch { color: var(--c3); }
+    </style>
+</head>
+<body>
+
+    <p class="intro">Keeper cost per month if you never resell: purchase amortized to a battery/range end-of-life, plus scheduled care and expected repairs. Drag the sliders; the cheap used car is pre-selected as owned.</p>
+
+    <div class="controls">
+        <div class="control-group">
+            <label for="km-slider">km / year <span id="km-val" class="value">9000</span></label>
+            <input type="range" id="km-slider" min="5000" max="20000" step="500" value="9000">
+        </div>
+        <div class="control-group">
+            <label for="rust-slider">Rust interval (years) <span id="rust-val" class="value">4</span></label>
+            <input type="range" id="rust-slider" min="2" max="8" step="1" value="4">
+        </div>
+        <div class="control-group">
+            <label for="winter-ok-slider">Winter OK range (km) <span id="winter-ok-val" class="value">80</span></label>
+            <input type="range" id="winter-ok-slider" min="50" max="120" step="5" value="80">
+        </div>
+        <div class="control-group">
+            <label for="winter-new-slider">Winter range when new (km) <span id="winter-new-val" class="value">115</span></label>
+            <input type="range" id="winter-new-slider" min="90" max="160" step="5" value="115">
+        </div>
+        <div class="control-group">
+            <label for="soh4-slider">SoH after 4 years (calibrates fade) <span id="soh4-val" class="value">91%</span></label>
+            <input type="range" id="soh4-slider" min="85" max="97" step="0.5" value="91">
+        </div>
+        <div class="control-group">
+            <label class="check-row" for="include-care">
+                <input type="checkbox" id="include-care" checked>
+                Include scheduled + expected repairs
+            </label>
+            <label class="check-row" for="include-hv">
+                <input type="checkbox" id="include-hv" checked>
+                Include HV electronics contingency (€5/mo past vehicle warranty)
+            </label>
+        </div>
+    </div>
+
+    <ul class="summary" aria-label="Keeper €/month by car" id="summary-list">
+        <li class="c0 owned"><span class="name">Cheap used 45</span><span id="tot-0" class="rate">—</span></li>
+        <li class="c1"><span class="name">Mid used 45</span><span id="tot-1" class="rate">—</span></li>
+        <li class="c2"><span class="name">Nearly new 65</span><span id="tot-2" class="rate">—</span></li>
+        <li class="c3"><span class="name">New 100</span><span id="tot-3" class="rate">—</span></li>
+    </ul>
+    <p class="note" id="life-note">Usability life from SoH → winter floor.</p>
+
+    <p class="section-title">Cost stack at each car’s SoH-based remaining life</p>
+    <div class="chart-container">
+        <canvas id="stackChart"></canvas>
+    </div>
+
+    <p class="section-title">Total €/month vs assumed remaining years (same horizon for all)</p>
+    <div class="chart-container tall">
+        <canvas id="lifeChart"></canvas>
+    </div>
+
+    <div class="pack-box">
+        <p class="section-title">Replace-vs-repair helper (battery / big bill)</p>
+        <p class="note">If a repair costs R and buys M months of use, compare R/M to the cheapest replace €/month above.</p>
+        <div class="controls" style="border-bottom: none; margin-bottom: 0; padding-bottom: 0;">
+            <div class="control-group">
+                <label for="r-slider">Repair cost R (€) <span id="r-val" class="value">7000</span></label>
+                <input type="range" id="r-slider" min="500" max="12000" step="100" value="7000">
+            </div>
+            <div class="control-group">
+                <label for="m-slider">Months bought M <span id="m-val" class="value">96</span></label>
+                <input type="range" id="m-slider" min="6" max="120" step="6" value="96">
+            </div>
+        </div>
+        <p class="pack-result" id="pack-result">—</p>
+    </div>
+
+    <script>
+        const COLORS = ['#3d6b4f', '#8a6d3b', '#3d5a80', '#8c4a3a'];
+        const ink = '#2c2c2c';
+        const muted = '#6b6b6b';
+
+        // Case-study cars (cheap used = owned)
+        const CARS = [
+            { id: 0, label: 'Cheap used 45', price: 9490, ageY: 4.41, km: 52800, soh: 0.91, owned: true, warrantyYLeft: 0 },
+            { id: 1, label: 'Mid used 45', price: 12470, ageY: 3.15, km: 11929, soh: null, owned: false, warrantyYLeft: 0 },
+            { id: 2, label: 'Nearly new 65', price: 15990, ageY: 1.73, km: 4500, soh: null, owned: false, warrantyYLeft: 1.27 },
+            { id: 3, label: 'New 100', price: 19990, ageY: 0, km: 0, soh: 1.0, owned: false, warrantyYLeft: 3.0 }
+        ];
+
+        // Scheduled base without rust (€/mo)
+        const SCHEDULED_BASE = 15 + 5 + 6 + 4 + 2 + 2 + 3; // ~37
+
+        const els = {
+            km: document.getElementById('km-slider'),
+            rust: document.getElementById('rust-slider'),
+            winterOk: document.getElementById('winter-ok-slider'),
+            winterNew: document.getElementById('winter-new-slider'),
+            soh4: document.getElementById('soh4-slider'),
+            care: document.getElementById('include-care'),
+            hv: document.getElementById('include-hv'),
+            r: document.getElementById('r-slider'),
+            m: document.getElementById('m-slider')
+        };
+
+        let stackChart = null;
+        let lifeChart = null;
+        let latestStackResults = null;
+
+        function sohFloor(winterOk, winterNew) {
+            return Math.min(0.99, winterOk / winterNew);
+        }
+
+        /** Exponential calendar fade: SoH(t) = exp(−λ t), λ from SoH@4y. */
+        function lambdaFromSoh4(soh4) {
+            return -Math.log(soh4) / 4;
+        }
+
+        function estimateSoh(car, lambda) {
+            if (car.soh != null) return car.soh;
+            return Math.exp(-lambda * car.ageY);
+        }
+
+        function yearsToFloor(car, lambda, floor) {
+            const soh = estimateSoh(car, lambda);
+            if (soh <= floor) return 0.25;
+            return Math.log(soh / floor) / lambda;
+        }
+
+        function unplannedBand(ageY) {
+            if (ageY < 3) return 10;
+            if (ageY < 6) return 30;
+            if (ageY < 10) return 45;
+            return 55;
+        }
+
+        function kmOverlay(km) {
+            if (km > 100000) return 20;
+            if (km > 60000) return 10;
+            return 0;
+        }
+
+        function averageUnplanned(car, kmYear, lifeY) {
+            const samples = [];
+            const steps = Math.min(24, Math.max(4, Math.ceil(lifeY * 2)));
+            for (let i = 0; i <= steps; i++) {
+                const t = (i / steps) * lifeY;
+                const age = car.ageY + t;
+                const km = car.km + kmYear * t;
+                let u = unplannedBand(age) + kmOverlay(km);
+                if (age < 3) u = Math.min(u, 10);
+                samples.push(u);
+            }
+            return samples.reduce((a, b) => a + b, 0) / samples.length;
+        }
+
+        function scheduledMo(rustYears) {
+            return SCHEDULED_BASE + (1000 / (rustYears * 12));
+        }
+
+        function hvMo(car) {
+            return car.warrantyYLeft > 1.5 ? 0 : 5;
+        }
+
+        function costsForCar(car, params, lifeOverride) {
+            const floor = sohFloor(params.winterOk, params.winterNew);
+            const lifeY = lifeOverride != null ? lifeOverride : yearsToFloor(car, params.lambda, floor);
+            const months = Math.max(lifeY * 12, 1);
+            const kauf = car.price / months;
+            const sched = params.includeCare ? scheduledMo(params.rustY) : 0;
+            const unpl = params.includeCare ? averageUnplanned(car, params.kmYear, Math.max(lifeY, 1)) : 0;
+            const hv = params.includeHv ? hvMo(car) : 0;
+            const total = kauf + sched + unpl + hv;
+            return { kauf, sched, unpl, hv, total, lifeY, months };
+        }
+
+        function readParams() {
+            const soh4 = parseFloat(els.soh4.value) / 100;
+            return {
+                kmYear: parseFloat(els.km.value),
+                rustY: parseFloat(els.rust.value),
+                winterOk: parseFloat(els.winterOk.value),
+                winterNew: parseFloat(els.winterNew.value),
+                soh4,
+                lambda: lambdaFromSoh4(soh4),
+                includeCare: els.care.checked,
+                includeHv: els.hv.checked
+            };
+        }
+
+        function fmtEuro(n) {
+            return '€' + Math.round(n);
+        }
+
+        function update() {
+            const p = readParams();
+
+            document.getElementById('km-val').textContent = String(p.kmYear);
+            document.getElementById('rust-val').textContent = String(p.rustY);
+            document.getElementById('winter-ok-val').textContent = String(p.winterOk);
+            document.getElementById('winter-new-val').textContent = String(p.winterNew);
+            document.getElementById('soh4-val').textContent = (p.soh4 * 100).toFixed(1) + '%';
+
+            const floor = sohFloor(p.winterOk, p.winterNew);
+            const results = CARS.map(c => costsForCar(c, p, null));
+
+            results.forEach((r, i) => {
+                document.getElementById('tot-' + i).textContent = fmtEuro(r.total) + '/mo';
+            });
+
+            const owned = results[0];
+            document.getElementById('life-note').textContent =
+                'Exponential SoH(t)=exp(−λt), λ=' + p.lambda.toFixed(4) + '/y from SoH@4y=' +
+                (p.soh4 * 100).toFixed(1) + '%. Floor ≈ ' + Math.round(floor * 100) +
+                '% (winter ' + p.winterOk + '/' + p.winterNew + ' km). Cheap used life ≈ ' +
+                owned.lifeY.toFixed(1) + 'y · purchase alone ≈ ' + fmtEuro(owned.kauf) + '/mo.';
+
+            updateStackChart(results);
+            updateLifeChart(p);
+            updatePackHelper(results);
+        }
+
+        function updateStackChart(results) {
+            latestStackResults = results;
+            const ctx = document.getElementById('stackChart').getContext('2d');
+            const labels = CARS.map(c => c.label);
+            const data = {
+                labels,
+                datasets: [
+                    {
+                        label: 'Purchase amort.',
+                        data: results.map(r => r.kauf),
+                        backgroundColor: '#3d5a80',
+                        stack: 't'
+                    },
+                    {
+                        label: 'Scheduled (incl. rust)',
+                        data: results.map(r => r.sched),
+                        backgroundColor: '#3d6b4f',
+                        stack: 't'
+                    },
+                    {
+                        label: 'Expected unplanned',
+                        data: results.map(r => r.unpl),
+                        backgroundColor: '#8a6d3b',
+                        stack: 't'
+                    },
+                    {
+                        label: 'HV contingency',
+                        data: results.map(r => r.hv),
+                        backgroundColor: '#8c4a3a',
+                        stack: 't'
+                    }
+                ]
+            };
+
+            if (stackChart) {
+                stackChart.data = data;
+                stackChart.update();
+                return;
+            }
+
+            stackChart = new Chart(ctx, {
+                type: 'bar',
+                data,
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: {
+                            stacked: true,
+                            ticks: { color: muted, font: { size: 11 } },
+                            grid: { display: false }
+                        },
+                        y: {
+                            stacked: true,
+                            title: {
+                                display: true,
+                                text: '€ / month',
+                                color: muted,
+                                font: { size: 12, family: 'Georgia, serif' }
+                            },
+                            ticks: { color: muted, font: { size: 11 } },
+                            grid: { color: 'rgba(0,0,0,0.06)' }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            labels: {
+                                color: ink,
+                                boxWidth: 12,
+                                font: { size: 11, family: 'Georgia, serif' },
+                                padding: 10
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                footer: (items) => {
+                                    const i = items[0].dataIndex;
+                                    const r = latestStackResults[i];
+                                    return 'Total ' + fmtEuro(r.total) + '/mo · life ' + r.lifeY.toFixed(1) + 'y';
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function updateLifeChart(p) {
+            const years = [];
+            for (let y = 2; y <= 16; y += 0.5) years.push(y);
+            const labels = years.map(y => y.toFixed(1));
+
+            const datasets = CARS.map((car, i) => ({
+                label: car.label,
+                data: years.map(y => costsForCar(car, p, y).total),
+                borderColor: COLORS[i],
+                backgroundColor: 'transparent',
+                borderWidth: car.owned ? 2.25 : 1.5,
+                borderDash: car.owned ? [] : [4, 3],
+                pointRadius: 0,
+                tension: 0.15
+            }));
+
+            const ctx = document.getElementById('lifeChart').getContext('2d');
+
+            if (lifeChart) {
+                lifeChart.data.labels = labels;
+                lifeChart.data.datasets = datasets;
+                lifeChart.update();
+                return;
+            }
+
+            lifeChart = new Chart(ctx, {
+                type: 'line',
+                data: { labels, datasets },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    scales: {
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Assumed remaining years (same for all)',
+                                color: muted,
+                                font: { size: 12, family: 'Georgia, serif' }
+                            },
+                            ticks: { color: muted, maxTicksLimit: 10, font: { size: 11 } },
+                            grid: { color: 'rgba(0,0,0,0.04)' }
+                        },
+                        y: {
+                            title: {
+                                display: true,
+                                text: 'Total keeper € / month',
+                                color: muted,
+                                font: { size: 12, family: 'Georgia, serif' }
+                            },
+                            ticks: { color: muted, font: { size: 11 } },
+                            grid: { color: 'rgba(0,0,0,0.06)' }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            labels: {
+                                color: ink,
+                                boxWidth: 14,
+                                font: { size: 11, family: 'Georgia, serif' },
+                                padding: 12
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                title: (items) => items[0].label + ' years remaining',
+                                label: (ctx) => ctx.dataset.label + ': ' + fmtEuro(ctx.parsed.y) + '/mo'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function updatePackHelper(results) {
+            const R = parseFloat(els.r.value);
+            const M = parseFloat(els.m.value);
+            document.getElementById('r-val').textContent = String(Math.round(R));
+            document.getElementById('m-val').textContent = String(Math.round(M));
+
+            const rpm = R / M;
+            const best = Math.min(...results.map(r => r.total));
+            const bestLabel = CARS[results.map(r => r.total).indexOf(best)].label;
+            const el = document.getElementById('pack-result');
+            const verdict = rpm < best
+                ? '<span class="keep">Keep &amp; repair</span>'
+                : '<span class="switch">Switch cars</span>';
+            el.innerHTML = 'R/M = ' + fmtEuro(rpm) + '/mo vs cheapest keeper total ' +
+                fmtEuro(best) + '/mo (' + bestLabel + ') → ' + verdict;
+        }
+
+        Object.values(els).forEach(el => {
+            el.addEventListener('input', update);
+            el.addEventListener('change', update);
+        });
+
+        update();
+    </script>
+</body>
+</html>
