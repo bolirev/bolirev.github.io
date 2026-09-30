@@ -18,7 +18,7 @@ Most car TCO write-ups assume you will sell. Purchase price is a sunk cost the d
 
 The usual advice says: do not repair if the bill exceeds the car’s market value. That is a trader rule. It protects the asset you intend to exit.
 
-I ask a different question. Let's suppose a €1,200 repair buys about twelve more months of usable car. That results in €100 per month of additional cost. And the cost per month at the car end of life is expected to be €70 per month. Then the repair correct the price for the extended year to 170 per month. So, if replacing the car would cost €200–300 per month once you amortize a newer purchase, keep repairing. The market value of your current car does not enter the comparison. Only forward-looking costs do.
+I ask a different question. Suppose the car cost €12,000 and you keep it for 10 years, 120 months. That is €100 per month. A €1,200 repair that buys one more year does not stack another €100 on top of the €100. The repair comes on top of the price, and the year comes on top of the life: €13,200 over 132 months, which is still €100 per month. Care that you pay every month continues on top of that. Keep repairing when this extended €/month stays below the €/month of buying another car. The market value of the current car does not enter the comparison.
 
 The hard cliff for a small EV is usually not a cascade of engine failures, it is rather a failing battery or broken chasis.
 
@@ -41,7 +41,7 @@ So the purchase decision is not will the battery die next year? It is whether am
 Amortizing purchase to a soft end-of-life is only the first term. The rest of the stack is:
 
 - Scheduled care: annual inspection, TÜV share, cheap city tires, fluids, 12V battery, filters.
-- Rust prevention: €1,000 every four years (~€21/month).
+- Rust treatment: a garage quote of about €2,000, expected to last at least ten years (~€17/month).
 - Expected unplanned repairs, axle, suspension etc.
 - Battery pack keep as a decision node, not a smear of €50/month forever. 
 

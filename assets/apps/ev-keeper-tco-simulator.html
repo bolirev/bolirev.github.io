@@ -181,8 +181,8 @@
             <input type="range" id="km-slider" min="5000" max="20000" step="500" value="9000">
         </div>
         <div class="control-group">
-            <label for="rust-slider">Rust interval (years) <span id="rust-val" class="value">4</span></label>
-            <input type="range" id="rust-slider" min="2" max="8" step="1" value="4">
+            <label for="rust-slider">Rust interval (years) <span id="rust-val" class="value">10</span></label>
+            <input type="range" id="rust-slider" min="6" max="15" step="1" value="10">
         </div>
         <div class="control-group">
             <label for="winter-ok-slider">Winter OK range (km) <span id="winter-ok-val" class="value">80</span></label>
@@ -228,7 +228,7 @@
 
     <div class="pack-box">
         <p class="section-title">Replace-vs-repair helper (battery / big bill)</p>
-        <p class="note">If a repair costs R and buys M months of use, compare R/M to the cheapest replace €/month above.</p>
+        <p class="note">A repair of R that buys M more months is added to the purchase price, and those months are added to the life. Care still costs the same every month. Compare that extended €/month with buying another car.</p>
         <div class="controls" style="border-bottom: none; margin-bottom: 0; padding-bottom: 0;">
             <div class="control-group">
                 <label for="r-slider">Repair cost R (€) <span id="r-val" class="value">7000</span></label>
@@ -255,8 +255,9 @@
             { id: 3, label: 'New 100', price: 19990, ageY: 0, km: 0, soh: 1.0, owned: false, warrantyYLeft: 3.0 }
         ];
 
-        // Scheduled base without rust (€/mo)
+        // Scheduled base without rust (€/mo). Garage quote: ~€2000, lasts ≥10 years.
         const SCHEDULED_BASE = 15 + 5 + 6 + 4 + 2 + 2 + 3; // ~37
+        const RUST_COST = 2000;
 
         const els = {
             km: document.getElementById('km-slider'),
@@ -341,7 +342,7 @@
         }
 
         function scheduledMo(rustYears) {
-            return SCHEDULED_BASE + (1000 / (rustYears * 12));
+            return SCHEDULED_BASE + (RUST_COST / (rustYears * 12));
         }
 
         function hvMo(car) {
@@ -588,14 +589,27 @@
             document.getElementById('r-val').textContent = String(Math.round(R));
             document.getElementById('m-val').textContent = String(Math.round(M));
 
-            const rpm = R / M;
-            const best = Math.min(...results.map(r => r.total));
-            const bestLabel = CARS[results.map(r => r.total).indexOf(best)].label;
+            const owned = results[0];
+            const care = owned.sched + owned.unpl + owned.hv;
+            const extMonths = owned.months + M;
+            const extended = (CARS[0].price + R) / extMonths + care;
+
+            let best = Infinity;
+            let bestLabel = '';
+            for (let i = 1; i < results.length; i++) {
+                if (results[i].total < best) {
+                    best = results[i].total;
+                    bestLabel = CARS[i].label;
+                }
+            }
+
             const el = document.getElementById('pack-result');
-            const verdict = rpm < best
+            const verdict = extended < best
                 ? '<span class="keep">Keep &amp; repair</span>'
                 : '<span class="switch">Switch cars</span>';
-            el.innerHTML = 'R/M = ' + fmtEuro(rpm) + '/mo vs cheapest keeper total ' +
+            el.innerHTML = 'Extended keeper = (' + fmtEuro(CARS[0].price) + ' + ' + fmtEuro(R) +
+                ') / ' + Math.round(extMonths) + ' mo + care ' + fmtEuro(care) +
+                '/mo = ' + fmtEuro(extended) + '/mo vs cheapest replacement ' +
                 fmtEuro(best) + '/mo (' + bestLabel + ') → ' + verdict;
         }
 
