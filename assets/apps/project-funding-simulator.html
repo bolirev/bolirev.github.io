@@ -1,0 +1,1708 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Project Funding Simulator</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --ink: #2c2c2c;
+            --muted: #6b6b6b;
+            --rule: #d8d8d8;
+            --accent: #3d5a80;
+            --safe: #3d6b4f;
+            --etf: #8c4a3a;
+            --ok: #3d6b4f;
+            --short: #8c4a3a;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            font-family: Georgia, "Times New Roman", Times, serif;
+            max-width: 820px;
+            margin: 0 auto;
+            padding: 4px 2px 16px;
+            background: transparent;
+            color: var(--ink);
+            font-size: 15px;
+            line-height: 1.45;
+        }
+
+        .intro, .note, .status {
+            color: var(--muted);
+            font-size: 0.92em;
+            margin: 0 0 16px;
+        }
+
+        .controls {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 18px 28px;
+            margin-bottom: 18px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid var(--rule);
+        }
+
+        @media (max-width: 560px) {
+            .controls { grid-template-columns: 1fr; }
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        label.slider-label, .field-label {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            gap: 12px;
+            font-size: 0.95em;
+        }
+
+        .value {
+            font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+            font-size: 0.95em;
+            color: var(--ink);
+            font-variant-numeric: tabular-nums;
+        }
+
+        input[type="range"] {
+            width: 100%;
+            cursor: pointer;
+            accent-color: var(--accent);
+        }
+
+        .meta {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            margin: 0 0 16px;
+            font-size: 0.95em;
+        }
+
+        .meta strong, .outcome strong {
+            font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+            font-weight: normal;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .meta .ok, .outcome .ok { color: var(--ok); }
+        .meta .short, .outcome .short { color: var(--short); }
+
+        .table-wrap { overflow-x: auto; margin-bottom: 8px; }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.92em;
+        }
+
+        th {
+            text-align: left;
+            font-weight: normal;
+            color: var(--muted);
+            font-size: 0.82em;
+            padding: 0 8px 6px 0;
+        }
+
+        td { padding: 0 8px 8px 0; vertical-align: middle; }
+
+        td.wait-cell, th.wait { text-align: center; padding-right: 0; }
+        td.x, th.x { width: 28px; padding-right: 0; }
+
+        input[type="text"], input[type="number"], input[type="month"], input[type="url"] {
+            font-family: inherit;
+            font-size: 0.95em;
+            color: var(--ink);
+            background: transparent;
+            border: none;
+            border-bottom: 1px solid var(--rule);
+            padding: 3px 0;
+            width: 100%;
+            min-width: 0;
+        }
+
+        input[type="number"] { font-variant-numeric: tabular-nums; }
+
+        input:focus { outline: none; border-bottom-color: var(--accent); }
+
+        button, .file-btn {
+            font-family: inherit;
+            font-size: 0.88em;
+            background: transparent;
+            border: 1px solid var(--rule);
+            color: var(--ink);
+            padding: 4px 10px;
+            cursor: pointer;
+        }
+
+        button:hover, .file-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+        button.remove {
+            border: none;
+            color: var(--muted);
+            padding: 0 4px;
+            font-size: 1.1em;
+            line-height: 1;
+        }
+
+        .row-actions, .history-head, .checkline {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px 12px;
+            align-items: center;
+            margin: 0 0 14px;
+        }
+
+        .url-input { flex: 1 1 180px; min-width: 160px; }
+
+        .file-btn input { display: none; }
+
+        details { margin: 0 0 14px; }
+        details summary { cursor: pointer; color: var(--muted); font-size: 0.9em; }
+        textarea {
+            width: 100%;
+            margin-top: 8px;
+            min-height: 88px;
+            font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+            font-size: 12px;
+            color: var(--ink);
+            background: transparent;
+            border: 1px solid var(--rule);
+            padding: 8px;
+        }
+
+        .format {
+            color: var(--muted);
+            font-size: 0.84em;
+            margin: 8px 0 0;
+        }
+
+        select {
+            font-family: inherit;
+            font-size: 0.92em;
+            color: var(--ink);
+            background: transparent;
+            border: none;
+            border-bottom: 1px solid var(--rule);
+            padding: 2px 0;
+            max-width: 100%;
+        }
+
+        .history {
+            margin-top: 6px;
+            padding-top: 8px;
+        }
+
+        .outcome { margin: 0 0 8px; font-size: 0.95em; }
+        .bills { list-style: none; padding: 0; margin: 0 0 16px; }
+        .bills li { margin: 0 0 3px; font-size: 0.9em; }
+
+        .chart-block { margin: 0 0 8px; }
+        .chart-title {
+            margin: 0 0 4px;
+            font-size: 0.82em;
+            color: var(--muted);
+        }
+        .chart-container { position: relative; width: 100%; }
+        .chart-container.wealth { height: 320px; }
+        .chart-container.coverage { height: 220px; }
+        canvas { display: block; width: 100%; height: 100%; }
+    </style>
+</head>
+<body>
+
+    <p class="intro">Each project is a bill on a date. A hard date is matched to an obligation that matures that month and is held until then, which locks the yield. A bill due inside a year stays in Tagesgeld. Projects that can wait, and any saving the dated bills do not need, go to the ETF.</p>
+
+    <div class="controls">
+        <div class="control-group">
+            <label class="slider-label" for="savings">Monthly savings <span id="savings-val" class="value">€1,000</span></label>
+            <input type="range" id="savings" min="0" max="8000" step="25" value="1000">
+        </div>
+        <div class="control-group">
+            <label class="slider-label" for="saved">Already saved <span id="saved-val" class="value">€10,000</span></label>
+            <input type="range" id="saved" min="0" max="400000" step="1000" value="10000">
+        </div>
+        <div class="control-group">
+            <label class="slider-label" for="safe-rate">Tagesgeld <span id="safe-val" class="value">2.5%</span></label>
+            <input type="range" id="safe-rate" min="0" max="6" step="0.1" value="2.5">
+        </div>
+        <div class="control-group">
+            <label class="slider-label" for="bond-rate">Obligation <span id="bond-val" class="value">3.5%</span></label>
+            <input type="range" id="bond-rate" min="0" max="8" step="0.1" value="3.5">
+        </div>
+        <div class="control-group">
+            <label class="slider-label" for="inflation">Inflation <span id="inflation-val" class="value">2.0%</span></label>
+            <input type="range" id="inflation" min="0" max="8" step="0.1" value="2">
+        </div>
+    </div>
+
+    <div class="meta" id="meta" aria-live="polite"></div>
+
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Project</th>
+                    <th>Cost today</th>
+                    <th>Due</th>
+                    <th class="wait">Can wait</th>
+                    <th class="x"></th>
+                </tr>
+            </thead>
+            <tbody id="projects"></tbody>
+        </table>
+    </div>
+
+    <div class="row-actions">
+        <button type="button" id="add-project">Add project</button>
+        <label class="file-btn">Load CSV<input type="file" id="file" accept=".csv,text/csv"></label>
+        <input type="url" id="sheet-url" class="url-input" placeholder="Published Google Sheet URL" aria-label="Published Google Sheet URL">
+        <button type="button" id="load-url">Load sheet</button>
+    </div>
+
+    <details>
+        <summary>Paste a CSV, or the file format</summary>
+        <textarea id="paste" spellcheck="false" placeholder="name,cost_today,due,flexible&#10;Car,16000,2029-04,no"></textarea>
+        <button type="button" id="load-paste">Use this CSV</button>
+        <p class="format">Projects: <code>name,cost_today,due,flexible</code>. Dates are <code>YYYY-MM</code>. <code>flexible</code> is <code>yes</code> or <code>no</code> (blank means the date cannot move). Inflation is the slider. Returns: a <code>date</code> column, then one column of monthly simple returns per history. <code>0.012</code> or <code>1.2%</code> means +1.2% that month. One row per month, oldest first, no gaps. A column of index levels named <code>level</code> is converted. Drop the file on this page, or save it as <code>assets/data/equity-returns.csv</code>.</p>
+    </details>
+
+    <p class="status" id="status"></p>
+
+    <div class="history">
+        <div class="history-head">
+            <label>Return path
+                <select id="series" aria-label="Return path"></select>
+            </label>
+            <label class="checkline"><input type="checkbox" id="worst" checked> Worst start</label>
+        </div>
+        <div class="control-group" style="margin-bottom: 14px;">
+            <label class="slider-label" for="start">Start <span id="start-val" class="value">—</span></label>
+            <input type="range" id="start" min="0" max="0" step="1" value="0">
+        </div>
+        <div class="control-group" style="margin-bottom: 14px;">
+            <label class="slider-label" for="etf-share">Hard-date saving in the ETF <span id="etf-val" class="value">0%</span></label>
+            <input type="range" id="etf-share" min="0" max="100" step="5" value="0">
+        </div>
+    </div>
+
+    <p class="outcome" id="outcome" aria-live="polite"></p>
+    <ul class="bills" id="bills"></ul>
+
+    <div class="chart-block">
+        <p class="chart-title">Tagesgeld, obligations, and the ETF, for the start month selected above</p>
+        <div class="chart-container wealth"><canvas id="wealth-chart"></canvas></div>
+    </div>
+    <div class="chart-block">
+        <p class="chart-title">Share of the inflated bills paid on the ideal date, by start month</p>
+        <div class="chart-container coverage"><canvas id="coverage-chart"></canvas></div>
+    </div>
+
+    <p class="note" id="path-note"></p>
+
+<script>
+(function () {
+    const MAX_DELAY = 180;
+    const HORIZON_CAP = 600;
+    const BOND_MIN = 12;
+
+    const NAME_H = new Set(['name', 'project', 'projekt', 'title', 'projektname']);
+    const COST_H = new Set(['cost_today', 'cost', 'kosten', 'amount', 'betrag', 'cost_eur']);
+    const DUE_H = new Set(['due', 'date', 'datum', 'fallig', 'faellig', 'due_date', 'month', 'ziel']);
+    const WAIT_H = new Set(['flexible', 'flexibel', 'can_wait', 'wait', 'soft', 'verschiebbar']);
+    const DATE_H = new Set(['date', 'datum', 'month', 'monat']);
+    const LEVEL_H = new Set(['level', 'index', 'price', 'nav', 'close', 'niveau']);
+
+    const savingsEl = document.getElementById('savings');
+    const savedEl = document.getElementById('saved');
+    const rateEl = document.getElementById('safe-rate');
+    const bondEl = document.getElementById('bond-rate');
+    const inflationEl = document.getElementById('inflation');
+    const etfEl = document.getElementById('etf-share');
+    const startEl = document.getElementById('start');
+    const worstEl = document.getElementById('worst');
+    const seriesEl = document.getElementById('series');
+    const tbody = document.getElementById('projects');
+
+    const state = {
+        histories: [],
+        windows: [],
+        selected: null,
+        boot: true,
+        pinning: false
+    };
+
+    let wealthChart = null;
+    let coverageChart = null;
+    let timer = 0;
+
+    function mulberry32(a) {
+        return function () {
+            a |= 0;
+            a = (a + 0x6D2B79F5) | 0;
+            let t = Math.imul(a ^ (a >>> 15), 1 | a);
+            t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+            return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+        };
+    }
+
+    function gauss(rand) {
+        let u = 0;
+        let v = 0;
+        while (u === 0) u = rand();
+        while (v === 0) v = rand();
+        return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+    }
+
+    function fillGeometric(rets, start, length, totalSimple) {
+        if (length <= 0) return;
+        const m = Math.pow(1 + totalSimple, 1 / length) - 1;
+        for (let i = 0; i < length; i++) {
+            if (start + i >= 0 && start + i < rets.length) rets[start + i] = m;
+        }
+    }
+
+    function illustratedHistory() {
+        const n = 720;
+        const rand = mulberry32(20261009);
+        const drift = Math.pow(1.07, 1 / 12) - 1;
+        const vol = 0.15 / Math.sqrt(12);
+        const rets = [];
+        for (let i = 0; i < n; i++) rets.push(drift + vol * gauss(rand));
+        fillGeometric(rets, 102, 18, -0.50);
+        fillGeometric(rets, 120, 36, 1 / 0.50 - 1);
+        fillGeometric(rets, 300, 30, -0.45);
+        fillGeometric(rets, 330, 48, 1 / 0.55 - 1);
+        fillGeometric(rets, 520, 6, -0.32);
+        fillGeometric(rets, 526, 12, 1 / 0.68 - 1);
+        return {
+            name: 'Illustrated',
+            illustrated: true,
+            dates: null,
+            returns: rets
+        };
+    }
+
+    function fmtEuro(n) {
+        return '€' + Math.round(n).toLocaleString('en-US');
+    }
+
+    function fmtEuroK(n) {
+        const sign = n < 0 ? '−' : '';
+        const a = Math.abs(n);
+        if (a >= 1000000) return sign + '€' + (a / 1000000).toFixed(1) + 'M';
+        if (a >= 10000) return sign + '€' + Math.round(a / 1000) + 'k';
+        return sign + '€' + Math.round(a).toLocaleString('en-US');
+    }
+
+    function fmtPct(n) {
+        return (Math.round(n * 10) / 10).toFixed(1) + '%';
+    }
+
+    function asOfToday() {
+        const d = new Date();
+        return { y: d.getFullYear(), m: d.getMonth() + 1 };
+    }
+
+    function addMonths(ym, n) {
+        const i = ym.y * 12 + (ym.m - 1) + n;
+        return { y: Math.floor(i / 12), m: (i % 12) + 1 };
+    }
+
+    function fmtYm(ym) {
+        return ym.y + '-' + String(ym.m).padStart(2, '0');
+    }
+
+    function monthsUntil(asOf, due) {
+        return (due.y - asOf.y) * 12 + (due.m - asOf.m);
+    }
+
+    function parseYearMonth(raw) {
+        const s = String(raw == null ? '' : raw).trim();
+        let m;
+        if ((m = /^(\d{4})-(\d{2})(?:-\d{2})?$/.exec(s))) return validYm(+m[1], +m[2]);
+        if ((m = /^(\d{1,2})\.(\d{1,2})\.(\d{4})$/.exec(s))) return validYm(+m[3], +m[2]);
+        if ((m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(s))) return validYm(+m[3], +m[2]);
+        if ((m = /^(\d{1,2})\/(\d{4})$/.exec(s))) return validYm(+m[2], +m[1]);
+        if ((m = /^(\d{4})\/(\d{2})$/.exec(s))) return validYm(+m[1], +m[2]);
+        if (/^\d{5}(\.\d+)?$/.test(s)) {
+            const serial = Math.round(Number(s));
+            if (serial > 20000 && serial < 80000) {
+                const utc = new Date(Date.UTC(1899, 11, 30) + serial * 86400000);
+                return validYm(utc.getUTCFullYear(), utc.getUTCMonth() + 1);
+            }
+        }
+        return null;
+    }
+
+    function validYm(y, m) {
+        if (!Number.isFinite(y) || !Number.isFinite(m) || m < 1 || m > 12 || y < 1900 || y > 2200) return null;
+        return { y: y, m: m };
+    }
+
+    function parseNumber(raw) {
+        if (raw == null) return null;
+        const original = String(raw).trim();
+        if (!original) return null;
+        const pct = /%$/.test(original);
+        let s = original.replace(/%$/, '').replace(/\s/g, '');
+        const hasComma = s.includes(',');
+        const hasDot = s.includes('.');
+        if (hasComma && hasDot) {
+            if (s.lastIndexOf(',') > s.lastIndexOf('.')) s = s.replace(/\./g, '').replace(',', '.');
+            else s = s.replace(/,/g, '');
+        } else if (hasComma || hasDot) {
+            const sep = hasComma ? ',' : '.';
+            const parts = s.split(sep);
+            const tail = parts[parts.length - 1];
+            const head = parts.slice(0, -1).join('');
+            const thousands = parts.length > 1 && tail.length === 3 && /^[1-9]\d*$/.test(head) && parts.slice(1, -1).every(function (p) { return p.length === 3; });
+            if (thousands && !pct) s = head + tail;
+            else s = head + '.' + tail;
+        }
+        const n = Number(s);
+        if (!Number.isFinite(n)) return null;
+        return pct ? n / 100 : n;
+    }
+
+    function parseWait(raw) {
+        const s = String(raw == null ? '' : raw).trim().toLowerCase();
+        if (!s) return false;
+        if (['no', 'n', 'false', '0', 'hard', 'nein', 'fixed'].indexOf(s) !== -1) return false;
+        if (['yes', 'y', 'true', '1', 'ja', 'flexible', 'flex', 'wait', 'soft', 'can_wait', 'can wait'].indexOf(s) !== -1) return true;
+        return false;
+    }
+
+    function normHeader(h) {
+        return String(h).trim().toLowerCase()
+            .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+            .replace(/[^a-z0-9]+/g, '_')
+            .replace(/^_|_$/g, '');
+    }
+
+    function parseCsv(text) {
+        const src = String(text).replace(/^\uFEFF/, '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
+        if (!src) return [];
+        const firstLine = src.split('\n')[0];
+        const commas = (firstLine.match(/,/g) || []).length;
+        const semis = (firstLine.match(/;/g) || []).length;
+        const delim = semis > commas ? ';' : ',';
+        const rows = [];
+        let row = [];
+        let cell = '';
+        let inQuotes = false;
+        for (let i = 0; i < src.length; i++) {
+            const c = src[i];
+            if (inQuotes) {
+                if (c === '"') {
+                    if (src[i + 1] === '"') { cell += '"'; i++; }
+                    else inQuotes = false;
+                } else cell += c;
+            } else if (c === '"') inQuotes = true;
+            else if (c === delim) { row.push(cell); cell = ''; }
+            else if (c === '\n') { row.push(cell); rows.push(row); row = []; cell = ''; }
+            else cell += c;
+        }
+        if (cell.length || row.length) { row.push(cell); rows.push(row); }
+        return rows.filter(function (r) { return r.some(function (c) { return String(c).trim() !== ''; }); });
+    }
+
+    function headerIndex(headers, set) {
+        for (let i = 0; i < headers.length; i++) {
+            if (set.has(headers[i])) return i;
+        }
+        return -1;
+    }
+
+    function looksLikeProjects(headers) {
+        const hasName = headerIndex(headers, NAME_H) !== -1;
+        const hasCost = headerIndex(headers, COST_H) !== -1;
+        const hasDue = headerIndex(headers, DUE_H) !== -1;
+        return hasCost && hasDue && (hasName || headers.length <= 4);
+    }
+
+    function annuityFactor(m, r) {
+        if (m <= 0) return 0;
+        if (Math.abs(r) < 1e-14) return m;
+        return (1 + r) * (Math.pow(1 + r, m) - 1) / r;
+    }
+
+    function analyze(wealth, items, r) {
+        const liab = items.filter(function (x) { return x.liable > 0 && x.rel >= 1; })
+            .slice()
+            .sort(function (a, b) { return a.rel - b.rel; });
+        if (!liab.length) return { savings: 0, binding: null, pv: 0 };
+        let savings = 0;
+        let binding = null;
+        let pv = 0;
+        for (let k = 0; k < liab.length; k++) {
+            const m = liab[k].rel;
+            let rolled = liab[k].liable;
+            for (let i = 0; i < k; i++) {
+                rolled += liab[i].liable * Math.pow(1 + r, m - liab[i].rel);
+            }
+            const grown = wealth * Math.pow(1 + r, m);
+            const bound = (rolled - grown) / annuityFactor(m, r);
+            const needPv = rolled / Math.pow(1 + r, m);
+            if (needPv > pv) pv = needPv;
+            if (bound > savings) {
+                savings = bound;
+                binding = liab[k].name;
+            }
+        }
+        return { savings: Math.max(0, savings), binding: savings > 0 ? binding : null, pv: Math.max(0, pv) };
+    }
+
+    function usesBond(monthIndex) {
+        return monthIndex >= BOND_MIN;
+    }
+
+    function bondSum(longs) {
+        return longs.reduce(function (sum, p) { return sum + p.bucket; }, 0);
+    }
+
+    function matchedPlan(projects, wealth, rCash, rBond, includeWait) {
+        let left = Math.max(0, wealth);
+        projects.forEach(function (p) {
+            if (p.m === 0 && (includeWait || !p.canWait)) left = Math.max(0, left - p.liable);
+        });
+        const upcoming = projects.filter(function (p) {
+            return p.m >= 1 && (includeWait || !p.canWait);
+        }).slice().sort(function (a, b) { return a.m - b.m; });
+        const shorts = upcoming.filter(function (p) { return !usesBond(p.m); });
+        const longs = upcoming.filter(function (p) { return usesBond(p.m); });
+        const shortItems = shorts.map(function (p) { return { name: p.name, rel: p.m, liable: p.liable }; });
+        const cashAssigned = Math.min(left, analyze(0, shortItems, rCash).pv);
+        left -= cashAssigned;
+        const cashPlan = analyze(cashAssigned, shortItems, rCash);
+        const parts = [];
+        if (cashPlan.savings > 1e-6) parts.push({ name: cashPlan.binding, savings: cashPlan.savings, vehicle: 'cash' });
+        longs.forEach(function (p) {
+            const spec = [{ name: p.name, rel: p.m, liable: p.liable }];
+            const assigned = Math.min(left, analyze(0, spec, rBond).pv);
+            left -= assigned;
+            const plan = analyze(assigned, spec, rBond);
+            if (plan.savings > 1e-6) parts.push({ name: p.name, savings: plan.savings, vehicle: 'bond' });
+        });
+        let savings = 0;
+        let binding = null;
+        let best = 0;
+        parts.forEach(function (part) {
+            savings += part.savings;
+            if (part.savings > best) {
+                best = part.savings;
+                binding = part.name;
+            }
+        });
+        return { savings: savings, binding: binding, parts: parts };
+    }
+
+    function simulate(projects, opts) {
+        const rCash = opts.r;
+        const rBond = opts.rBond == null ? opts.r : opts.rBond;
+        const infM = opts.infM;
+        const savings = opts.savings;
+        const share = opts.etfShare;
+        const extra = opts.extra;
+        const start = opts.start;
+        const returns = opts.returns;
+        const items = projects.map(function (p) {
+            return {
+                name: p.name,
+                canWait: p.canWait,
+                originalMonth: p.m,
+                m: p.m,
+                ideal: p.liable,
+                liable: p.liable,
+                delay: 0,
+                paid: 0,
+                paidMonth: null,
+                done: false,
+                vehicle: (!p.canWait && usesBond(p.m)) ? 'bond' : 'cash',
+                bucket: 0
+            };
+        });
+
+        let cash = opts.wealth;
+        let etf = 0;
+
+        items.forEach(function (p) {
+            if (p.m > 0 || p.done) return;
+            if (!p.canWait) {
+                const paid = Math.min(cash + etf, p.liable);
+                const fromCash = Math.min(cash, paid);
+                cash -= fromCash;
+                etf -= (paid - fromCash);
+                p.paid = paid;
+                p.paidMonth = 0;
+                p.done = true;
+            }
+        });
+        items.forEach(function (p) {
+            if (p.m > 0 || p.done) return;
+            const paid = Math.min(cash + etf, p.liable);
+            if (paid + 1e-6 >= p.liable) {
+                const fromCash = Math.min(cash, p.liable);
+                cash -= fromCash;
+                etf -= (p.liable - fromCash);
+                p.paid = p.liable;
+                p.paidMonth = 0;
+                p.done = true;
+            } else {
+                p.m = 1;
+                p.delay = 1;
+                p.liable *= (1 + infM);
+            }
+        });
+
+        const shorts = items.filter(function (p) { return !p.canWait && p.vehicle === 'cash'; });
+        const longs = items.filter(function (p) { return !p.canWait && p.vehicle === 'bond'; })
+            .sort(function (a, b) { return a.originalMonth - b.originalMonth; });
+        const maxDue = items.reduce(function (mx, p) { return Math.max(mx, p.originalMonth); }, 0);
+        const cap = Math.min(HORIZON_CAP, maxDue + extra);
+        const path = [];
+
+        function shortSpecs(relOf) {
+            return shorts.filter(function (p) { return !p.done; })
+                .map(function (p) { return { name: p.name, rel: relOf(p), liable: p.liable }; })
+                .filter(function (p) { return p.rel >= 1 && p.liable > 0; });
+        }
+
+        function release(beforeGrowth, month) {
+            const relOf = function (p) { return beforeGrowth ? p.m - month + 1 : p.m - month; };
+            const cashPv = analyze(0, shortSpecs(relOf), rCash).pv;
+            if (cash > cashPv) {
+                etf += cash - cashPv;
+                cash = cashPv;
+            }
+            longs.forEach(function (p) {
+                if (p.done) return;
+                const rel = relOf(p);
+                if (rel < 1) return;
+                const pv = analyze(0, [{ name: p.name, rel: rel, liable: p.liable }], rBond).pv;
+                if (p.bucket > pv) {
+                    etf += p.bucket - pv;
+                    p.bucket = pv;
+                }
+            });
+        }
+
+        function hardNeeds(month) {
+            const needs = [];
+            const specs = shortSpecs(function (p) { return p.m - month + 1; });
+            const cashNeed = analyze(cash, specs, rCash).savings;
+            if (cashNeed > 1e-8) {
+                const soonest = specs.reduce(function (m, x) { return Math.min(m, x.rel); }, 1e9);
+                needs.push({ rel: soonest, vehicle: 'cash', amount: cashNeed, target: null });
+            }
+            longs.forEach(function (p) {
+                if (p.done) return;
+                const rel = p.m - month + 1;
+                if (rel < 1) return;
+                const need = analyze(p.bucket, [{ name: p.name, rel: rel, liable: p.liable }], rBond).savings;
+                if (need > 1e-8) needs.push({ rel: rel, vehicle: 'bond', amount: need, target: p });
+            });
+            needs.sort(function (a, b) { return a.rel - b.rel; });
+            return needs;
+        }
+
+        function take(available, need) {
+            const amount = Math.min(Math.max(available, 0), Math.max(need, 0));
+            return amount;
+        }
+
+        const shortPv0 = analyze(0, shortSpecs(function (p) { return p.m; }), rCash).pv;
+        const cashKeep = Math.min(cash, shortPv0);
+        let rest = cash - cashKeep;
+        cash = cashKeep;
+        longs.forEach(function (p) {
+            if (p.done) return;
+            const pv = analyze(0, [{ name: p.name, rel: p.m, liable: p.liable }], rBond).pv;
+            const put = Math.min(rest, pv);
+            rest -= put;
+            p.bucket = put;
+        });
+        etf += rest;
+        const locked = cash + bondSum(longs);
+        if (share > 0 && locked > 0) {
+            const move = locked * share;
+            const scale = (locked - move) / locked;
+            cash *= scale;
+            longs.forEach(function (p) { p.bucket *= scale; });
+            etf += move;
+        }
+
+        function snapshot(month) {
+            return { month: month, cash: cash, bond: bondSum(longs), risky: etf, paid: [] };
+        }
+
+        if (opts.record) path.push(snapshot(0));
+
+        let month = 0;
+        while (month < cap) {
+            month += 1;
+            release(true, month);
+            const needs = hardNeeds(month);
+            let room = savings;
+            needs.forEach(function (need) {
+                need.taken = Math.min(room, need.amount);
+                room -= need.taken;
+            });
+            const hardTaken = savings - room;
+            const keep = 1 - share;
+            needs.forEach(function (need) {
+                const kept = need.taken * keep;
+                if (need.vehicle === 'cash') cash += kept;
+                else need.target.bucket += kept;
+            });
+            etf += room + hardTaken * share;
+
+            const eqIndex = start + month - 1;
+            const eq = eqIndex >= 0 && eqIndex < returns.length ? returns[eqIndex] : null;
+            if (eq == null || eq <= -1) break;
+            cash *= (1 + rCash);
+            longs.forEach(function (p) {
+                if (!p.done) p.bucket *= (1 + rBond);
+            });
+            etf *= (1 + eq);
+            if (cash < 0) cash = 0;
+            if (etf < 0) etf = 0;
+            longs.forEach(function (p) { if (p.bucket < 0) p.bucket = 0; });
+
+            const paidNames = [];
+            items.forEach(function (p) {
+                if (p.done || p.canWait || p.m !== month) return;
+                let need = p.liable;
+                if (p.vehicle === 'bond') {
+                    const fromBond = take(p.bucket, need);
+                    p.bucket -= fromBond;
+                    need -= fromBond;
+                }
+                const fromCash = take(cash, need);
+                cash -= fromCash;
+                need -= fromCash;
+                const fromEtf = take(etf, need);
+                etf -= fromEtf;
+                need -= fromEtf;
+                p.paid = p.liable - need;
+                p.paidMonth = month;
+                p.done = true;
+                paidNames.push(p.name);
+            });
+
+            release(false, month);
+            items.forEach(function (p) {
+                if (p.done || !p.canWait || p.m > month) return;
+                const surplus = Math.max(0, cash - analyze(0, shortSpecs(function (h) { return h.m - month; }), rCash).pv);
+                if (etf + surplus + 1e-6 >= p.liable) {
+                    let need = p.liable;
+                    const fromEtf = take(etf, need);
+                    etf -= fromEtf;
+                    need -= fromEtf;
+                    cash -= need;
+                    p.paid = p.liable;
+                    p.paidMonth = month;
+                    p.done = true;
+                    paidNames.push(p.name);
+                } else if (p.delay >= extra || month >= cap) {
+                    p.done = true;
+                    p.unpaid = true;
+                } else {
+                    p.m += 1;
+                    p.delay += 1;
+                    p.liable *= (1 + infM);
+                }
+            });
+
+            if (opts.record) {
+                const snap = snapshot(month);
+                snap.paid = paidNames;
+                path.push(snap);
+            }
+            if (month >= maxDue && items.every(function (p) { return p.done; })) break;
+        }
+
+        items.forEach(function (p) {
+            if (!p.done) {
+                p.done = true;
+                p.unpaid = true;
+            }
+        });
+
+        let idealSum = 0;
+        let onTimeSum = 0;
+        let flexIdeal = 0;
+        let flexOn = 0;
+        let hardMin = 1;
+        let hardCount = 0;
+        let maxDelay = 0;
+        items.forEach(function (p) {
+            idealSum += p.ideal;
+            const onDate = p.paidMonth === p.originalMonth;
+            if (onDate) onTimeSum += Math.min(p.paid, p.ideal);
+            if (!p.canWait) {
+                hardCount += 1;
+                const ratio = onDate ? p.paid / p.ideal : 0;
+                if (ratio < hardMin) hardMin = ratio;
+            } else {
+                flexIdeal += p.ideal;
+                if (onDate) flexOn += Math.min(p.paid, p.ideal);
+                maxDelay = Math.max(maxDelay, p.unpaid ? extra + 1 : p.delay);
+            }
+        });
+
+        return {
+            path: path,
+            projects: items,
+            onTime: idealSum > 0 ? onTimeSum / idealSum : 1,
+            flexOnTime: flexIdeal > 0 ? flexOn / flexIdeal : 1,
+            hardMin: hardCount ? hardMin : 1,
+            delay: maxDelay,
+            terminal: cash + bondSum(longs) + etf,
+            openingSavings: null
+        };
+    }
+
+    function monthOneSplit(projects, wealth, savings, rCash, rBond, etfShare) {
+        const plan = matchedPlan(projects, wealth, rCash, rBond, false);
+        let room = savings;
+        let toCash = 0;
+        let toBond = 0;
+        plan.parts.forEach(function (part) {
+            const take = Math.min(room, Math.max(0, part.savings));
+            room -= take;
+            if (part.vehicle === 'bond') toBond += take;
+            else toCash += take;
+        });
+        const hard = toCash + toBond;
+        return {
+            toCash: toCash * (1 - etfShare),
+            toBond: toBond * (1 - etfShare),
+            toEtf: room + hard * etfShare
+        };
+    }
+
+    function pointLabel(series, index) {
+        if (series && series.dates && series.dates[index]) return series.dates[index];
+        const year = Math.floor(index / 12);
+        const month = (index % 12) + 1;
+        return 'Year ' + year + ', month ' + month;
+    }
+
+    function calendarLabel(asOf, monthIndex) {
+        return fmtYm(addMonths(asOf, monthIndex));
+    }
+
+    function stretchSlider(slider, needed) {
+        if (needed > parseFloat(slider.max)) {
+            const step = parseFloat(slider.step) || 1;
+            slider.max = String(Math.ceil(needed / step) * step + step * 4);
+        }
+    }
+
+    function readControls() {
+        return {
+            savings: parseFloat(savingsEl.value),
+            wealth: parseFloat(savedEl.value),
+            rateAnnual: parseFloat(rateEl.value) / 100,
+            bondAnnual: parseFloat(bondEl.value) / 100,
+            inflation: parseFloat(inflationEl.value) / 100,
+            etfShare: parseFloat(etfEl.value) / 100
+        };
+    }
+
+    function paintControlLabels(c) {
+        document.getElementById('savings-val').textContent = fmtEuro(c.savings);
+        document.getElementById('saved-val').textContent = fmtEuro(c.wealth);
+        document.getElementById('safe-val').textContent = fmtPct(parseFloat(rateEl.value));
+        document.getElementById('bond-val').textContent = fmtPct(parseFloat(bondEl.value));
+        document.getElementById('inflation-val').textContent = fmtPct(parseFloat(inflationEl.value));
+        document.getElementById('etf-val').textContent = Math.round(c.etfShare * 100) + '%';
+    }
+
+    function readProjects(inflation) {
+        const asOf = asOfToday();
+        const projects = [];
+        let skipped = 0;
+        tbody.querySelectorAll('tr').forEach(function (tr) {
+            const name = tr.querySelector('.name').value.trim() || 'Project';
+            const cost = parseNumber(tr.querySelector('.cost').value);
+            const due = parseYearMonth(tr.querySelector('.due').value);
+            const canWait = tr.querySelector('input.wait').checked;
+            if (!due || cost == null || cost <= 0) {
+                if (tr.querySelector('.name').value.trim() || tr.querySelector('.cost').value.trim()) skipped += 1;
+                return;
+            }
+            let m = monthsUntil(asOf, due);
+            if (m < 0) { skipped += 1; return; }
+            if (m > HORIZON_CAP) m = HORIZON_CAP;
+            const liable = cost * Math.pow(1 + inflation, m / 12);
+            projects.push({ name: name, cost: cost, canWait: canWait, m: m, liable: liable, due: due });
+        });
+        return { projects: projects, skipped: skipped, asOf: asOf };
+    }
+
+    function windowPlan(seriesLength, maxDue) {
+        if (maxDue < 1) return { nStarts: Math.max(1, seriesLength), extra: 0, need: 1 };
+        if (seriesLength < maxDue) return { nStarts: 0, extra: 0, need: maxDue };
+        const extra = Math.min(MAX_DELAY, seriesLength - maxDue);
+        const need = maxDue + extra;
+        return { nStarts: seriesLength - need + 1, extra: extra, need: need };
+    }
+
+    function worstIndex(windows) {
+        let best = 0;
+        for (let i = 1; i < windows.length; i++) {
+            const a = windows[i];
+            const b = windows[best];
+            if (a.onTime < b.onTime - 1e-9) best = i;
+            else if (Math.abs(a.onTime - b.onTime) < 1e-9 && a.delay > b.delay) best = i;
+            else if (Math.abs(a.onTime - b.onTime) < 1e-9 && a.delay === b.delay && a.terminal < b.terminal) best = i;
+        }
+        return best;
+    }
+
+    function hardPlan(projects, wealth, rCash, rBond) {
+        return matchedPlan(projects, wealth, rCash, rBond, false);
+    }
+
+    function allPlan(projects, wealth, rCash, rBond) {
+        return matchedPlan(projects, wealth, rCash, rBond, true);
+    }
+
+    function schedule() {
+        clearTimeout(timer);
+        timer = setTimeout(recompute, 40);
+    }
+
+    function recompute() {
+        const c = readControls();
+        paintControlLabels(c);
+        const loaded = readProjects(c.inflation);
+        const projects = loaded.projects;
+        const r = Math.pow(1 + c.rateAnnual, 1 / 12) - 1;
+        const rBond = Math.pow(1 + c.bondAnnual, 1 / 12) - 1;
+        const infM = Math.pow(1 + c.inflation, 1 / 12) - 1;
+        const hard = hardPlan(projects, c.wealth, r, rBond);
+        const all = allPlan(projects, c.wealth, r, rBond);
+
+        if (state.boot) {
+            state.boot = false;
+            const step = parseFloat(savingsEl.step);
+            const target = Math.ceil(Math.max(0, all.savings - 0.01) / step) * step;
+            stretchSlider(savingsEl, Math.max(target, all.savings));
+            savingsEl.value = String(target);
+            c.savings = parseFloat(savingsEl.value);
+            paintControlLabels(c);
+        } else {
+            stretchSlider(savingsEl, all.savings);
+        }
+
+        const series = state.histories[parseInt(seriesEl.value, 10)] || state.histories[0];
+        const maxDue = projects.reduce(function (mx, p) { return Math.max(mx, p.m); }, 0);
+        let note = '';
+        let nStarts = 0;
+        let extra = 0;
+        let returns = [];
+        if (!projects.length) {
+            note = 'Add a project with a cost and a due month.';
+        } else if (!series) {
+            note = 'Load a return path.';
+        } else {
+            const plan = windowPlan(series.returns.length, maxDue);
+            nStarts = plan.nStarts;
+            extra = plan.extra;
+            returns = series.returns;
+            if (nStarts <= 0) {
+                note = 'This return path has ' + series.returns.length + ' months. The last project is ' + maxDue + ' months out, so the path needs to be at least that long.';
+                returns = new Array(Math.max(maxDue, 1)).fill(0);
+                nStarts = 1;
+                extra = 0;
+            } else if (series.illustrated) {
+                note = 'Illustrated path, ' + series.returns.length + ' months: 7% drift, 15% volatility, and three drawn crashes (about −50%, −45%, −32%). It is not an index. Load a CSV to use your own monthly returns.';
+            } else {
+                note = series.name + ', ' + series.returns.length + ' months' + (series.dates ? ' (' + series.dates[0] + ' to ' + series.dates[series.dates.length - 1] + ')' : '') + '.';
+            }
+        }
+        if (loaded.skipped) note += ' Skipped ' + loaded.skipped + ' row' + (loaded.skipped === 1 ? '' : 's') + ' with a missing cost, a bad date, or a date already past.';
+        document.getElementById('path-note').textContent = note;
+
+        const windows = [];
+        for (let i = 0; i < nStarts; i++) {
+            const sim = simulate(projects, {
+                wealth: c.wealth,
+                savings: c.savings,
+                r: r,
+                rBond: rBond,
+                infM: infM,
+                etfShare: c.etfShare,
+                extra: extra,
+                start: i,
+                returns: returns,
+                record: false
+            });
+            windows.push({ onTime: sim.onTime, flexOnTime: sim.flexOnTime, hardMin: sim.hardMin, delay: sim.delay, terminal: sim.terminal });
+        }
+        state.windows = windows;
+        state.asOf = loaded.asOf;
+        state.projects = projects;
+        state.params = { c: c, r: r, rBond: rBond, infM: infM, extra: extra, returns: returns, series: series, hard: hard, all: all, projects: projects, asOf: loaded.asOf };
+
+        const hardCovered = windows.length ? windows.filter(function (w) { return w.hardMin >= 1 - 1e-6; }).length / windows.length : 1;
+        const flexCovered = windows.length ? windows.reduce(function (sum, w) { return sum + (w.flexOnTime || 0); }, 0) / windows.length : 1;
+        renderMeta(c, hard, all, hardCovered, flexCovered, windows);
+
+        if (!windows.length) {
+            state.selected = null;
+            renderSelected();
+            renderCoverage();
+            return;
+        }
+
+        startEl.max = String(windows.length - 1);
+        startEl.disabled = windows.length < 2 || worstEl.checked;
+        if (worstEl.checked) {
+            state.pinning = true;
+            startEl.value = String(worstIndex(windows));
+            state.pinning = false;
+        } else if (parseInt(startEl.value, 10) > windows.length - 1) {
+            startEl.value = String(windows.length - 1);
+        }
+        renderSelected();
+        renderCoverage();
+    }
+
+    function renderMeta(c, hard, all, hardCovered, flexCovered, windows) {
+        const meta = document.getElementById('meta');
+        if (!state.projects.length) {
+            meta.innerHTML = '';
+            return;
+        }
+        const split = monthOneSplit(state.projects, c.wealth, c.savings, state.params.r, state.params.rBond, c.etfShare);
+        const hardCls = c.savings + 0.5 >= hard.savings ? 'ok' : 'short';
+        let hardText;
+        const piece = hard.binding ? ' ' + escapeHtml(hard.binding) + ' is the largest piece.' : '';
+        if (hard.savings <= 0.5) hardText = 'Already saved covers the hard dates.';
+        else if (c.savings + 0.5 >= hard.savings) {
+            hardText = 'Hard dates need <strong class="ok">' + fmtEuro(hard.savings) + '/mo</strong>.' + piece;
+        } else {
+            hardText = 'Hard dates need <strong class="short">' + fmtEuro(hard.savings) + '/mo</strong>.' + piece + ' This saving is short by <strong class="short">' + fmtEuro(hard.savings - c.savings) + '/mo</strong>.';
+        }
+        let allText;
+        if (!state.projects.some(function (p) { return p.canWait; })) allText = '';
+        else if (all.savings <= hard.savings + 0.5) allText = 'The projects that can wait fit in the same monthly amount.';
+        else allText = 'Matching every project, including those that can wait, would take <strong>' + fmtEuro(all.savings) + '/mo</strong>.';
+        const bits = [];
+        if (split.toBond >= 1) bits.push('<strong>' + fmtEuro(split.toBond) + '</strong> into obligations');
+        if (split.toCash >= 1) bits.push('<strong>' + fmtEuro(split.toCash) + '</strong> into Tagesgeld');
+        if (split.toEtf >= 1) bits.push('<strong>' + fmtEuro(split.toEtf) + '</strong> into the ETF');
+        let flow = bits.length ? 'At the start, the monthly saving puts ' + bits.join(', ') + '.' : 'The monthly saving goes to the ETF. Savings already in hand cover the hard dates.';
+        if (c.etfShare > 0) flow += ' ' + Math.round(c.etfShare * 100) + '% of the hard-date saving is bought as ETF instead of an obligation.';
+        let cover = '';
+        if (windows.length > 1) {
+            cover = 'Hard dates clear in <strong class="' + (hardCovered > 0.999 ? 'ok' : 'short') + '">' + Math.round(hardCovered * 100) + '%</strong> of start months.';
+            if (state.projects.some(function (p) { return p.canWait; })) {
+                cover += ' Projects that can wait are on time in <strong class="' + (flexCovered > 0.999 ? 'ok' : 'short') + '">' + Math.round(flexCovered * 100) + '%</strong> of them.';
+            }
+        }
+        meta.innerHTML = [hardText, allText, flow, cover].filter(Boolean).map(function (line) {
+            return '<div class="' + hardCls + '">' + line + '</div>';
+        }).join('');
+        meta.querySelectorAll('div').forEach(function (el, i) {
+            if (i > 0) el.className = '';
+        });
+    }
+
+    function renderSelected() {
+        const p = state.params;
+        const outcome = document.getElementById('outcome');
+        const bills = document.getElementById('bills');
+        if (!p || !state.windows.length) {
+            outcome.textContent = '';
+            bills.innerHTML = '';
+            drawWealth([]);
+            document.getElementById('start-val').textContent = '—';
+            return;
+        }
+        const start = parseInt(startEl.value, 10) || 0;
+        const series = p.series;
+        document.getElementById('start-val').textContent = series ? pointLabel(series, start) : '—';
+        const sim = simulate(p.projects, {
+            wealth: p.c.wealth,
+            savings: p.c.savings,
+            r: p.r,
+            rBond: p.rBond,
+            infM: p.infM,
+            etfShare: p.c.etfShare,
+            extra: p.extra,
+            start: start,
+            returns: p.returns,
+            record: true
+        });
+        state.selected = sim;
+        const w = state.windows[start];
+        const onPct = Math.round(sim.onTime * 100);
+        let sentence = 'In this window, <strong class="' + (sim.onTime > 0.999 ? 'ok' : 'short') + '">' + onPct + '%</strong> of the inflated cost is paid on the ideal date.';
+        if (w && w.delay > 0) {
+            const late = sim.projects.filter(function (proj) { return proj.canWait && (proj.delay > 0 || proj.unpaid); });
+            if (late.length) {
+                sentence += ' ' + late.map(function (proj) {
+                    return proj.unpaid
+                        ? escapeHtml(proj.name) + ' is still unpaid after the extra wait'
+                        : escapeHtml(proj.name) + ' is ' + proj.delay + ' month' + (proj.delay === 1 ? '' : 's') + ' late';
+                }).join('. ') + '.';
+            }
+        }
+        outcome.innerHTML = sentence;
+        bills.innerHTML = sim.projects
+            .slice()
+            .sort(function (a, b) { return a.originalMonth - b.originalMonth; })
+            .map(function (proj) {
+                const when = calendarLabel(p.asOf, proj.originalMonth);
+                let tail;
+                if (proj.paidMonth === proj.originalMonth && proj.paid + 0.5 >= proj.ideal) tail = '<span class="ok">paid on time</span>';
+                else if (proj.unpaid) tail = '<span class="short">unpaid</span>';
+                else if (proj.canWait && proj.delay > 0) tail = '<span class="short">paid ' + proj.delay + ' months late</span>, at ' + fmtEuro(proj.liable);
+                else tail = '<span class="short">short ' + fmtEuro(proj.ideal - proj.paid) + '</span>';
+                return '<li>' + escapeHtml(proj.name) + ' — ' + fmtEuro(proj.ideal) + ' in ' + when + ' — ' + tail + '</li>';
+            }).join('');
+        drawWealth(sim.path);
+        markCoverage();
+    }
+
+    function escapeHtml(s) {
+        return String(s).replace(/[&<>"']/g, function (ch) {
+            return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch];
+        });
+    }
+
+    function drawWealth(path) {
+        const canvas = document.getElementById('wealth-chart');
+        if (typeof Chart === 'undefined') return;
+        const asOf = state.asOf || asOfToday();
+        const labels = path.map(function (pt) { return calendarLabel(asOf, pt.month); });
+        const cash = path.map(function (pt) { return pt.cash; });
+        const bond = path.map(function (pt) { return pt.bond; });
+        const etf = path.map(function (pt) { return pt.risky; });
+        const marks = [];
+        path.forEach(function (pt, idx) {
+            if (pt.paid && pt.paid.length) marks.push({ index: idx, name: pt.paid.join(', ') });
+        });
+        const ink = '#2c2c2c';
+        const muted = '#6b6b6b';
+        const data = {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'Tagesgeld',
+                    data: cash,
+                    borderColor: '#3d6b4f',
+                    backgroundColor: 'rgba(61, 107, 79, 0.45)',
+                    fill: true,
+                    pointRadius: 0,
+                    borderWidth: 1.5,
+                    tension: 0
+                },
+                {
+                    label: 'Obligation',
+                    data: bond,
+                    borderColor: '#8a6d3b',
+                    backgroundColor: 'rgba(138, 109, 59, 0.45)',
+                    fill: true,
+                    pointRadius: 0,
+                    borderWidth: 1.5,
+                    tension: 0
+                },
+                {
+                    label: 'ETF',
+                    data: etf,
+                    borderColor: '#8c4a3a',
+                    backgroundColor: 'rgba(140, 74, 58, 0.28)',
+                    fill: true,
+                    pointRadius: 0,
+                    borderWidth: 1.5,
+                    tension: 0
+                }
+            ]
+        };
+        const options = {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: false,
+            interaction: { mode: 'index', intersect: false },
+            scales: {
+                x: {
+                    stacked: true,
+                    ticks: { color: muted, maxTicksLimit: 8, font: { size: 11 } },
+                    grid: { color: 'rgba(0,0,0,0.04)' }
+                },
+                y: {
+                    stacked: true,
+                    beginAtZero: true,
+                    ticks: {
+                        color: muted,
+                        font: { size: 11 },
+                        callback: function (v) { return fmtEuroK(v); }
+                    },
+                    grid: { color: 'rgba(0,0,0,0.06)' }
+                }
+            },
+            plugins: {
+                legend: { labels: { color: ink, boxWidth: 14, font: { size: 11, family: 'Georgia, serif' }, padding: 12 } },
+                tooltip: {
+                    callbacks: {
+                        label: function (ctx) {
+                            return ctx.dataset.label + ': ' + fmtEuro(ctx.parsed.y);
+                        },
+                        afterBody: function (items) {
+                            const idx = items[0].dataIndex;
+                            const names = path[idx] && path[idx].paid;
+                            return names && names.length ? 'Paid: ' + names.join(', ') : '';
+                        }
+                    }
+                }
+            }
+        };
+        if (!wealthChart) {
+            wealthChart = new Chart(canvas.getContext('2d'), { type: 'line', data: data, options: options, plugins: [markPlugin] });
+        } else {
+            wealthChart.data = data;
+            wealthChart.options = options;
+            wealthChart.update();
+        }
+        wealthChart.$marks = marks;
+        wealthChart.update();
+    }
+
+    const markPlugin = {
+        id: 'paymentMarks',
+        afterDraw: function (chart) {
+            const marks = chart.$marks || [];
+            if (!marks.length || !chart.chartArea) return;
+            const ctx = chart.ctx;
+            const area = chart.chartArea;
+            const x = chart.scales.x;
+            ctx.save();
+            ctx.font = '11px Georgia, serif';
+            ctx.fillStyle = '#6b6b6b';
+            ctx.strokeStyle = 'rgba(44,44,44,0.35)';
+            ctx.lineWidth = 1;
+            let last = -999;
+            marks.forEach(function (mark) {
+                const px = x.getPixelForValue(mark.index);
+                if (px < area.left || px > area.right) return;
+                ctx.beginPath();
+                ctx.moveTo(px, area.top);
+                ctx.lineTo(px, area.bottom);
+                ctx.stroke();
+                const width = ctx.measureText(mark.name).width;
+                let tx = px + 4;
+                if (tx + width > area.right - 2) tx = px - width - 4;
+                if (tx < area.left) tx = area.left;
+                if (tx - last > 8) {
+                    ctx.fillText(mark.name, tx, area.top + 12);
+                    last = tx + width;
+                }
+            });
+            ctx.restore();
+        }
+    };
+
+    const selectedPlugin = {
+        id: 'selectedStart',
+        afterDraw: function (chart) {
+            const idx = chart.$selected;
+            if (idx == null || !chart.chartArea) return;
+            const x = chart.scales.x;
+            const area = chart.chartArea;
+            const px = x.getPixelForValue(idx);
+            if (px < area.left || px > area.right) return;
+            const ctx = chart.ctx;
+            ctx.save();
+            ctx.strokeStyle = '#3d5a80';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.moveTo(px, area.top);
+            ctx.lineTo(px, area.bottom);
+            ctx.stroke();
+            ctx.restore();
+        }
+    };
+
+    function renderCoverage() {
+        const canvas = document.getElementById('coverage-chart');
+        if (typeof Chart === 'undefined') return;
+        const series = state.params && state.params.series;
+        const windows = state.windows;
+        const labels = windows.map(function (_, i) { return series ? pointLabel(series, i) : String(i); });
+        const data = windows.map(function (w) { return Math.round(w.onTime * 1000) / 10; });
+        const ink = '#2c2c2c';
+        const muted = '#6b6b6b';
+        const chartData = {
+            labels: labels,
+            datasets: [{
+                label: 'Paid on the ideal date',
+                data: data,
+                borderColor: '#3d5a80',
+                backgroundColor: 'rgba(61, 90, 128, 0.12)',
+                fill: true,
+                pointRadius: 0,
+                borderWidth: 1.5,
+                tension: 0
+            }]
+        };
+        const options = {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: false,
+            interaction: { mode: 'index', intersect: false },
+            scales: {
+                x: {
+                    ticks: { color: muted, maxTicksLimit: 8, font: { size: 11 } },
+                    grid: { color: 'rgba(0,0,0,0.04)' }
+                },
+                y: {
+                    min: 0,
+                    max: 100,
+                    ticks: {
+                        color: muted,
+                        font: { size: 11 },
+                        callback: function (v) { return v + '%'; }
+                    },
+                    grid: { color: 'rgba(0,0,0,0.06)' }
+                }
+            },
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        title: function (items) { return items[0].label; },
+                        label: function (ctx) { return ctx.parsed.y.toFixed(1) + '% on time'; },
+                    afterBody: function (items) {
+                        const idx = items[0].dataIndex;
+                        const delay = coverageChart && coverageChart.$delays ? coverageChart.$delays[idx] : 0;
+                        if (!delay) return 'Every project on its ideal date';
+                        return 'Latest wait: ' + delay + ' month' + (delay === 1 ? '' : 's');
+                    }
+                    }
+                }
+            }
+        };
+        if (!coverageChart) {
+            coverageChart = new Chart(canvas.getContext('2d'), { type: 'line', data: chartData, options: options, plugins: [selectedPlugin] });
+        } else {
+            coverageChart.data = chartData;
+            coverageChart.options = options;
+            coverageChart.update();
+        }
+        coverageChart.$delays = windows.map(function (w) { return w.delay; });
+        markCoverage();
+    }
+
+    function markCoverage() {
+        if (!coverageChart) return;
+        coverageChart.$selected = state.windows.length ? parseInt(startEl.value, 10) || 0 : null;
+        coverageChart.update();
+    }
+
+    function addRow(proj) {
+        const tr = document.createElement('tr');
+        const asOf = asOfToday();
+        const due = proj && proj.due ? fmtYm(proj.due) : fmtYm(addMonths(asOf, proj && proj.months ? proj.months : 36));
+        const name = proj && proj.name ? proj.name : 'Project';
+        const cost = proj && proj.cost != null ? proj.cost : 10000;
+        const wait = proj && proj.canWait ? ' checked' : '';
+        tr.innerHTML =
+            '<td><input class="name" type="text" aria-label="Project name" value="' + escapeHtml(name) + '"></td>' +
+            '<td><input class="cost" type="number" min="0" step="100" aria-label="Cost today" value="' + cost + '"></td>' +
+            '<td><input class="due" type="month" aria-label="Due month" value="' + due + '"></td>' +
+            '<td class="wait-cell"><input class="wait" type="checkbox" aria-label="Can wait"' + wait + '></td>' +
+            '<td class="x"><button type="button" class="remove" aria-label="Remove ' + escapeHtml(name) + '">×</button></td>';
+        tbody.appendChild(tr);
+    }
+
+    function replaceProjects(list) {
+        tbody.innerHTML = '';
+        if (!list.length) addRow(null);
+        list.forEach(function (p) { addRow(p); });
+        schedule();
+    }
+
+    function historiesFromRows(rows) {
+        if (!rows.length) throw new Error('The CSV is empty.');
+        const headers = rows[0].map(normHeader);
+        const dateCol = headerIndex(headers, DATE_H) === -1 ? 0 : headerIndex(headers, DATE_H);
+        const histories = [];
+        for (let col = 0; col < headers.length; col++) {
+            if (col === dateCol) continue;
+            const name = rows[0][col].trim() || ('Series ' + (col + 1));
+            const key = headers[col];
+            if (!key) continue;
+            const dates = [];
+            const values = [];
+            for (let r = 1; r < rows.length; r++) {
+                const due = parseYearMonth(rows[r][dateCol]);
+                const num = parseNumber(rows[r][col]);
+                if (!due || num == null) continue;
+                dates.push(fmtYm(due));
+                values.push(num);
+            }
+            if (values.length < 2) continue;
+            const abs = values.map(function (v) { return Math.abs(v); }).sort(function (a, b) { return a - b; });
+            const median = abs[Math.floor(abs.length / 2)];
+            const asLevel = LEVEL_H.has(key) || median > 1.5;
+            if (asLevel) {
+                const rets = [];
+                const outDates = [];
+                for (let i = 1; i < values.length; i++) {
+                    if (values[i - 1] === 0) continue;
+                    const ret = values[i] / values[i - 1] - 1;
+                    if (ret <= -1) continue;
+                    rets.push(ret);
+                    outDates.push(dates[i]);
+                }
+                if (rets.length) histories.push({ name: name, illustrated: false, dates: outDates, returns: rets });
+            } else {
+                const rets = [];
+                const outDates = [];
+                values.forEach(function (v, i) {
+                    if (v <= -1) return;
+                    rets.push(v);
+                    outDates.push(dates[i]);
+                });
+                if (rets.length) histories.push({ name: name, illustrated: false, dates: outDates, returns: rets });
+            }
+        }
+        if (!histories.length) throw new Error('No return column found. Use a date column and at least one column of monthly returns.');
+        histories.forEach(function (h) {
+            if (!h.dates) return;
+            for (let i = 1; i < h.dates.length; i++) {
+                const prev = parseYearMonth(h.dates[i - 1]);
+                const next = parseYearMonth(h.dates[i]);
+                if (prev && next && monthsUntil(prev, next) !== 1) h.gapped = true;
+            }
+        });
+        return histories;
+    }
+
+    function projectsFromRows(rows) {
+        if (!rows.length) throw new Error('The CSV is empty.');
+        const headers = rows[0].map(normHeader);
+        const nameCol = headerIndex(headers, NAME_H);
+        const costCol = headerIndex(headers, COST_H);
+        const dueCol = headerIndex(headers, DUE_H);
+        const waitCol = headerIndex(headers, WAIT_H);
+        if (costCol === -1 || dueCol === -1) throw new Error('Project CSV needs cost_today and due columns.');
+        const list = [];
+        for (let r = 1; r < rows.length; r++) {
+            const cost = parseNumber(rows[r][costCol]);
+            const due = parseYearMonth(rows[r][dueCol]);
+            if (cost == null || cost <= 0 || !due) continue;
+            list.push({
+                name: nameCol === -1 ? 'Project' : (rows[r][nameCol].trim() || 'Project'),
+                cost: cost,
+                due: due,
+                canWait: waitCol === -1 ? false : parseWait(rows[r][waitCol])
+            });
+        }
+        if (!list.length) throw new Error('No project rows with a cost and a due date.');
+        return list;
+    }
+
+    function loadText(text, label) {
+        const status = document.getElementById('status');
+        try {
+            const rows = parseCsv(text);
+            if (!rows.length) throw new Error('The CSV is empty.');
+            const headers = rows[0].map(normHeader);
+            if (looksLikeProjects(headers)) {
+                replaceProjects(projectsFromRows(rows));
+                status.textContent = 'Loaded ' + tbody.querySelectorAll('tr').length + ' projects' + (label ? ' from ' + label : '') + '.';
+            } else {
+                const loaded = historiesFromRows(rows);
+                const illustrated = state.histories.filter(function (h) { return h.illustrated; });
+                state.histories = loaded.concat(illustrated.length ? illustrated : [illustratedHistory()]);
+                fillSeriesSelect(0);
+                const gap = loaded.some(function (h) { return h.gapped; });
+                status.textContent = 'Loaded ' + loaded.map(function (h) { return h.name; }).join(', ') + (label ? ' from ' + label : '') + '.' + (gap ? ' Some months are missing; each remaining row is still treated as one plan month.' : '');
+                schedule();
+            }
+        } catch (err) {
+            status.textContent = err.message;
+        }
+    }
+
+    function fillSeriesSelect(index) {
+        seriesEl.innerHTML = state.histories.map(function (h, i) {
+            return '<option value="' + i + '">' + escapeHtml(h.name) + '</option>';
+        }).join('');
+        seriesEl.value = String(index);
+    }
+
+    function sheetCsvUrl(raw) {
+        const text = raw.trim();
+        if (!text) return null;
+        let url;
+        try { url = new URL(text); } catch (e) { throw new Error('That is not a URL.'); }
+        if (url.pathname.indexOf('/edit') !== -1) {
+            throw new Error('An edit link stays private, so this page cannot read it. Use File → Share → Publish to web, choose CSV, and paste that link. Or download the CSV and load the file.');
+        }
+        if (url.pathname.endsWith('/pubhtml')) url.pathname = url.pathname.replace(/pubhtml$/, 'pub');
+        if (url.pathname.indexOf('/pub') !== -1 && !url.searchParams.has('output')) url.searchParams.set('output', 'csv');
+        return url.toString();
+    }
+
+    function defaultProjects() {
+        return [
+            { name: 'Car', cost: 16000, months: 30, canWait: false },
+            { name: 'Kitchen', cost: 28000, months: 60, canWait: false },
+            { name: 'Down payment', cost: 75000, months: 120, canWait: true }
+        ];
+    }
+
+    function assertChecks() {
+        const two = analyze(0, [
+            { name: 'a', rel: 2, liable: 100 },
+            { name: 'b', rel: 5, liable: 100 }
+        ], 0);
+        if (Math.abs(two.savings - 50) > 1e-6) throw new Error('Safe monthly amount check failed.');
+        const one = analyze(0, [{ name: 'a', rel: 12, liable: 12000 }], 0);
+        if (Math.abs(one.savings - 1000) > 1e-6) throw new Error('Twelve-month annuity check failed.');
+        const covered = analyze(12000, [{ name: 'a', rel: 12, liable: 12000 }], 0);
+        if (covered.savings !== 0) throw new Error('Already-saved check failed.');
+        const grown = analyze(0, [{ name: 'a', rel: 1, liable: 100 }], 0.01);
+        if (Math.abs(grown.savings - 100 / 1.01) > 1e-6) throw new Error('One-month growth check failed.');
+        const projects = [
+            { name: 'a', canWait: false, m: 2, liable: 100 },
+            { name: 'b', canWait: false, m: 5, liable: 100 }
+        ];
+        const sim = simulate(projects, {
+            wealth: 0, savings: 50, r: 0, rBond: 0, infM: 0, etfShare: 0, extra: 0,
+            start: 0, returns: [0, 0, 0, 0, 0], record: false
+        });
+        sim.projects.forEach(function (p) {
+            if (p.paid + 1e-6 < p.ideal) throw new Error('Flat saving did not pay the hard bills.');
+        });
+        const bondOnly = matchedPlan([
+            { name: 'kitchen', canWait: false, m: 60, liable: 1000 }
+        ], 0, 0, 0.01, false);
+        const cashRate = matchedPlan([
+            { name: 'kitchen', canWait: false, m: 60, liable: 1000 }
+        ], 0, 0, 0, false);
+        if (!(bondOnly.savings < cashRate.savings - 1e-6)) throw new Error('Obligation yield did not lower the monthly amount.');
+        const bonds = matchedPlan([
+            { name: 'car', canWait: false, m: 24, liable: 120 },
+            { name: 'kitchen', canWait: false, m: 60, liable: 300 }
+        ], 0, 0, 0, false);
+        const crash = new Array(60).fill(-0.2);
+        const separated = simulate([
+            { name: 'car', canWait: false, m: 24, liable: 120 },
+            { name: 'kitchen', canWait: false, m: 60, liable: 300 }
+        ], {
+            wealth: 0, savings: bonds.savings, r: 0, rBond: 0, infM: 0, etfShare: 0, extra: 0,
+            start: 0, returns: crash, record: false
+        });
+        separated.projects.forEach(function (p) {
+            if (p.paid + 1e-4 < p.ideal) throw new Error('Matched obligations did not pay through a crash.');
+        });
+    }
+
+    tbody.addEventListener('input', schedule);
+    tbody.addEventListener('change', schedule);
+    tbody.addEventListener('click', function (e) {
+        const btn = e.target.closest('button.remove');
+        if (!btn) return;
+        const row = btn.closest('tr');
+        row.remove();
+        if (!tbody.querySelector('tr')) addRow(null);
+        schedule();
+    });
+
+    document.getElementById('add-project').addEventListener('click', function () {
+        addRow(null);
+        schedule();
+    });
+    [savingsEl, savedEl, rateEl, bondEl, inflationEl, etfEl].forEach(function (el) {
+        el.addEventListener('input', schedule);
+    });
+    seriesEl.addEventListener('change', schedule);
+    worstEl.addEventListener('change', function () {
+        startEl.disabled = worstEl.checked || state.windows.length < 2;
+        schedule();
+    });
+    startEl.addEventListener('input', function () {
+        if (state.pinning) return;
+        worstEl.checked = false;
+        startEl.disabled = state.windows.length < 2;
+        renderSelected();
+    });
+    document.getElementById('file').addEventListener('change', function (e) {
+        const file = e.target.files && e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = function () { loadText(String(reader.result), file.name); };
+        reader.readAsText(file);
+        e.target.value = '';
+    });
+    document.getElementById('load-paste').addEventListener('click', function () {
+        loadText(document.getElementById('paste').value, '');
+    });
+    document.getElementById('load-url').addEventListener('click', function () {
+        const status = document.getElementById('status');
+        let url;
+        try { url = sheetCsvUrl(document.getElementById('sheet-url').value); }
+        catch (err) { status.textContent = err.message; return; }
+        if (!url) { status.textContent = 'Paste the published CSV link.'; return; }
+        status.textContent = 'Loading the sheet…';
+        fetch(url)
+            .then(function (res) {
+                if (!res.ok) throw new Error('The sheet returned ' + res.status + '.');
+                return res.text();
+            })
+            .then(function (text) { loadText(text, 'the sheet'); })
+            .catch(function () {
+                status.textContent = 'The page could not read that URL. Publish to the web as CSV, or download the file and load it here.';
+            });
+    });
+
+    document.body.addEventListener('dragover', function (e) {
+        if (e.dataTransfer && e.dataTransfer.types && Array.prototype.indexOf.call(e.dataTransfer.types, 'Files') !== -1) e.preventDefault();
+    });
+    document.body.addEventListener('drop', function (e) {
+        const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+        if (!file) return;
+        e.preventDefault();
+        const reader = new FileReader();
+        reader.onload = function () { loadText(String(reader.result), file.name); };
+        reader.readAsText(file);
+    });
+
+    try { assertChecks(); }
+    catch (err) {
+        document.getElementById('status').textContent = err.message;
+    }
+
+    defaultProjects().forEach(addRow);
+    state.histories = [illustratedHistory()];
+    fillSeriesSelect(0);
+    recompute();
+
+    fetch('/assets/data/equity-returns.csv', { cache: 'no-store' })
+        .then(function (res) {
+            if (!res.ok) return null;
+            return res.text();
+        })
+        .then(function (text) {
+            if (!text || !text.trim()) return;
+            loadText(text, 'assets/data/equity-returns.csv');
+        })
+        .catch(function () { /* illustrated path remains */ });
+})();
+</script>
+</body>
+</html>
