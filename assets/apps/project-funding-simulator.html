@@ -216,7 +216,7 @@
 </head>
 <body>
 
-    <p class="intro">Each project is a bill on a date. A hard date is matched to an obligation that matures that month and is held until then, which locks the yield. A bill due inside a year stays in Tagesgeld. Projects that can wait, and any saving the dated bills do not need, go to the ETF.</p>
+    <p class="intro">Each project is a bill on a date. A hard date uses the latest obligation in the list that matures on or before that month, and that bond is held to its own date. That locks the yield only if it was bought at or below par. The months after it matures, and any bill with no such bond, earn Tagesgeld. Interest on both is taxed once a year, and any interest not yet taxed is taxed when the money is spent. Projects that can wait, and any saving the dated bills do not need, go to an accumulating ETF, which is taxed on the gain when the shares are sold.</p>
 
     <div class="controls">
         <div class="control-group">
@@ -232,8 +232,8 @@
             <input type="range" id="safe-rate" min="0" max="6" step="0.1" value="2.5">
         </div>
         <div class="control-group">
-            <label class="slider-label" for="bond-rate">Obligation <span id="bond-val" class="value">3.5%</span></label>
-            <input type="range" id="bond-rate" min="0" max="8" step="0.1" value="3.5">
+            <label class="slider-label" for="tax-rate">Tax <span id="tax-val" class="value">26.375%</span></label>
+            <input type="number" id="tax-rate" min="0" max="50" step="0.001" value="26.375" aria-label="Tax rate">
         </div>
         <div class="control-group">
             <label class="slider-label" for="inflation">Inflation <span id="inflation-val" class="value">2.0%</span></label>
@@ -260,6 +260,28 @@
 
     <div class="row-actions">
         <button type="button" id="add-project">Add project</button>
+    </div>
+
+    <p class="chart-title">Obligations held to maturity. The yield is the pre-tax return if the bond is bought at or below par and held to that month.</p>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Obligation</th>
+                    <th>Yield %</th>
+                    <th>Matures</th>
+                    <th class="x"></th>
+                </tr>
+            </thead>
+            <tbody id="bonds"></tbody>
+        </table>
+    </div>
+    <div class="row-actions">
+        <button type="button" id="add-bond">Add obligation</button>
+    </div>
+    <p class="format" id="bond-note">The rows shipped with the page are Bundesbank reference yields on 9 October 2026. Each of those Bunds was priced at or below 100, accrued interest included. A longer bond is left unused: selling it before maturity is not a locked return.</p>
+
+    <div class="row-actions">
         <label class="file-btn">Load CSV<input type="file" id="file" accept=".csv,text/csv"></label>
         <input type="url" id="sheet-url" class="url-input" placeholder="Published Google Sheet URL" aria-label="Published Google Sheet URL">
         <button type="button" id="load-url">Load sheet</button>
@@ -269,7 +291,7 @@
         <summary>Paste a CSV, or the file format</summary>
         <textarea id="paste" spellcheck="false" placeholder="name,cost_today,due,flexible&#10;Car,16000,2029-04,no"></textarea>
         <button type="button" id="load-paste">Use this CSV</button>
-        <p class="format">Projects: <code>name,cost_today,due,flexible</code>. Dates are <code>YYYY-MM</code>. <code>flexible</code> is <code>yes</code> or <code>no</code> (blank means the date cannot move). Inflation is the slider. Returns: a <code>date</code> column, then one column of monthly simple returns per history. <code>0.012</code> or <code>1.2%</code> means +1.2% that month. One row per month, oldest first, no gaps. A column of index levels named <code>level</code> is converted. Drop the file on this page, or save it as <code>assets/data/equity-returns.csv</code>.</p>
+        <p class="format">Projects: <code>name,cost_today,due,flexible</code>. Dates are <code>YYYY-MM</code>. <code>flexible</code> is <code>yes</code> or <code>no</code> (blank means the date cannot move). Obligations: <code>name,yield,due</code>. <code>yield</code> is the pre-tax percent if the bond is bought at or below par. Inflation and tax are the controls above. Returns: a <code>date</code> column, then one column of monthly simple returns per history. <code>0.012</code> or <code>1.2%</code> means +1.2% that month. One row per month, oldest first, no gaps. A column of index levels named <code>level</code> is converted. Drop the file on this page, or save it as <code>assets/data/equity-returns.csv</code>.</p>
     </details>
 
     <p class="status" id="status"></p>
@@ -309,25 +331,26 @@
 (function () {
     const MAX_DELAY = 180;
     const HORIZON_CAP = 600;
-    const BOND_MIN = 12;
 
     const NAME_H = new Set(['name', 'project', 'projekt', 'title', 'projektname']);
     const COST_H = new Set(['cost_today', 'cost', 'kosten', 'amount', 'betrag', 'cost_eur']);
     const DUE_H = new Set(['due', 'date', 'datum', 'fallig', 'faellig', 'due_date', 'month', 'ziel']);
     const WAIT_H = new Set(['flexible', 'flexibel', 'can_wait', 'wait', 'soft', 'verschiebbar']);
+    const YIELD_H = new Set(['yield', 'ytm', 'rendite', 'return']);
     const DATE_H = new Set(['date', 'datum', 'month', 'monat']);
     const LEVEL_H = new Set(['level', 'index', 'price', 'nav', 'close', 'niveau']);
 
     const savingsEl = document.getElementById('savings');
     const savedEl = document.getElementById('saved');
     const rateEl = document.getElementById('safe-rate');
-    const bondEl = document.getElementById('bond-rate');
+    const taxEl = document.getElementById('tax-rate');
     const inflationEl = document.getElementById('inflation');
     const etfEl = document.getElementById('etf-share');
     const startEl = document.getElementById('start');
     const worstEl = document.getElementById('worst');
     const seriesEl = document.getElementById('series');
     const tbody = document.getElementById('projects');
+    const bondBody = document.getElementById('bonds');
 
     const state = {
         histories: [],
@@ -526,6 +549,13 @@
         return hasCost && hasDue && (hasName || headers.length <= 4);
     }
 
+    function looksLikeBonds(headers) {
+        const hasYield = headerIndex(headers, YIELD_H) !== -1;
+        const hasDue = headerIndex(headers, DUE_H) !== -1;
+        const hasCost = headerIndex(headers, COST_H) !== -1;
+        return hasYield && hasDue && !hasCost;
+    }
+
     function annuityFactor(m, r) {
         if (m <= 0) return 0;
         if (Math.abs(r) < 1e-14) return m;
@@ -558,15 +588,155 @@
         return { savings: Math.max(0, savings), binding: savings > 0 ? binding : null, pv: Math.max(0, pv) };
     }
 
-    function usesBond(monthIndex) {
-        return monthIndex >= BOND_MIN;
+    function pickBond(month, bonds) {
+        let best = null;
+        bonds.forEach(function (b) {
+            if (b.m < 1 || b.m > month) return;
+            if (!best || b.m > best.m || (b.m === best.m && b.annual > best.annual)) best = b;
+        });
+        return best;
     }
 
-    function bondSum(longs) {
-        return longs.reduce(function (sum, p) { return sum + p.bucket; }, 0);
+    function stepAccount(bal, taxable, deposit, rate, tax, charge) {
+        bal += deposit;
+        const interest = bal * rate;
+        bal += interest;
+        taxable += interest;
+        if (charge) {
+            const due = Math.max(0, taxable) * tax;
+            bal -= due;
+            taxable = 0;
+        }
+        return { bal: bal, taxable: taxable };
     }
 
-    function matchedPlan(projects, wealth, rCash, rBond, includeWait) {
+    function netOf(bal, taxable, tax) {
+        return bal - Math.max(0, taxable) * tax;
+    }
+
+    function withdrawNet(bal, taxable, need, tax) {
+        if (need <= 1e-8 || bal <= 1e-10) return { bal: bal, taxable: taxable, net: 0 };
+        const gain = Math.min(bal, Math.max(0, taxable));
+        const netPer = 1 - tax * (gain / bal);
+        let gross = netPer > 1e-8 ? need / netPer : need;
+        if (gross > bal) gross = bal;
+        const f = gross / bal;
+        const taxDue = gain * f * tax;
+        return { bal: bal - gross, taxable: taxable - gain * f, net: gross - taxDue };
+    }
+
+    function rateFor(abs, bondUntil, rBond, rCash) {
+        return abs <= bondUntil ? rBond : rCash;
+    }
+
+    function forwardNet(bal, taxable, monthsLeft, absStart, bondUntil, rBond, rCash, tax, savings) {
+        let b = bal;
+        let t = taxable;
+        for (let i = 0; i < monthsLeft; i++) {
+            const abs = absStart + i;
+            const next = stepAccount(b, t, savings, rateFor(abs, bondUntil, rBond, rCash), tax, abs % 12 === 0);
+            b = next.bal;
+            t = next.taxable;
+        }
+        return netOf(b, t, tax);
+    }
+
+    function streamFactors(months, bondUntil, rBond, rCash, tax) {
+        const perSave = forwardNet(0, 0, months, 1, bondUntil, rBond, rCash, tax, 1);
+        const perWealth = forwardNet(1, 0, months, 1, bondUntil, rBond, rCash, tax, 0);
+        return { perSave: perSave, perWealth: perWealth };
+    }
+
+    function singleSavings(liable, wealth, factors) {
+        const perW = factors.perWealth > 1e-12 ? factors.perWealth : 1;
+        const pv = liable / perW;
+        const savings = factors.perSave > 1e-12 ? Math.max(0, (liable - wealth * factors.perWealth) / factors.perSave) : 0;
+        return { savings: savings, pv: pv };
+    }
+
+    function additionalSavings(bal, taxable, monthsLeft, absStart, bondUntil, rBond, rCash, tax, liable) {
+        const zero = forwardNet(bal, taxable, monthsLeft, absStart, bondUntil, rBond, rCash, tax, 0);
+        if (zero >= liable - 1e-6) return 0;
+        const one = forwardNet(bal, taxable, monthsLeft, absStart, bondUntil, rBond, rCash, tax, 1);
+        const slope = one - zero;
+        if (slope <= 1e-12) return Infinity;
+        return Math.max(0, (liable - zero) / slope);
+    }
+
+    function releaseNet(state, endIfIdle, liable, tax) {
+        if (!(endIfIdle > liable + 1e-4) || state.bal <= 1e-8) return 0;
+        const have = netOf(state.bal, state.taxable, tax);
+        if (have <= 1e-6) return 0;
+        const f = Math.min(1, 1 - liable / endIfIdle);
+        const want = f * have;
+        const taken = withdrawNet(state.bal, state.taxable, want, tax);
+        state.bal = taken.bal;
+        state.taxable = taken.taxable;
+        return taken.net;
+    }
+
+    function cashCanPay(bills, wealth, savings, rCash, tax, absStart, taxable0) {
+        const items = bills.slice().sort(function (a, b) { return a.m - b.m; });
+        if (!items.length) return { ok: true, binding: null };
+        let bal = wealth;
+        let taxable = taxable0 || 0;
+        const origin = absStart || 1;
+        let i = 0;
+        let binding = items[0].name;
+        let tight = Infinity;
+        const last = items[items.length - 1].m;
+        for (let m = 1; m <= last; m++) {
+            const abs = origin + m - 1;
+            const next = stepAccount(bal, taxable, savings, rCash, tax, abs % 12 === 0);
+            bal = next.bal;
+            taxable = next.taxable;
+            while (i < items.length && items[i].m === m) {
+                const have = netOf(bal, taxable, tax);
+                const slack = have - items[i].liable;
+                if (slack < tight) {
+                    tight = slack;
+                    binding = items[i].name;
+                }
+                if (have + 1e-4 < items[i].liable) return { ok: false, binding: items[i].name };
+                const taken = withdrawNet(bal, taxable, items[i].liable, tax);
+                bal = taken.bal;
+                taxable = taken.taxable;
+                i += 1;
+            }
+        }
+        return { ok: true, binding: binding };
+    }
+
+    function solveCash(bills, wealth, rCash, tax, absStart, taxable0) {
+        if (!bills.length) return { savings: 0, binding: null, pv: 0 };
+        const hi0 = bills.reduce(function (sum, b) { return sum + b.liable; }, 0);
+        let lo = 0;
+        let hi = Math.max(hi0, 1);
+        if (!cashCanPay(bills, wealth, hi, rCash, tax, absStart, taxable0).ok) hi = hi0 * 4 + 1;
+        for (let i = 0; i < 48; i++) {
+            const mid = (lo + hi) / 2;
+            if (cashCanPay(bills, wealth, mid, rCash, tax, absStart, taxable0).ok) hi = mid;
+            else lo = mid;
+        }
+        let pvLo = 0;
+        let pvHi = hi0;
+        for (let i = 0; i < 48; i++) {
+            const mid = (pvLo + pvHi) / 2;
+            if (cashCanPay(bills, mid, 0, rCash, tax, absStart, 0).ok) pvHi = mid;
+            else pvLo = mid;
+        }
+        const paid = cashCanPay(bills, wealth, hi, rCash, tax, absStart, taxable0);
+        return { savings: hi, binding: paid.binding, pv: pvHi };
+    }
+
+    function coverText(bond, gap) {
+        if (!bond) return 'Tagesgeld';
+        const y = (bond.annual * 100).toFixed(2);
+        if (gap > 0) return bond.name + ' at ' + y + '%, then Tagesgeld for ' + gap + ' month' + (gap === 1 ? '' : 's');
+        return bond.name + ' at ' + y + '%';
+    }
+
+    function matchedPlan(projects, wealth, rCash, bonds, tax, includeWait) {
         let left = Math.max(0, wealth);
         projects.forEach(function (p) {
             if (p.m === 0 && (includeWait || !p.canWait)) left = Math.max(0, left - p.liable);
@@ -574,20 +744,41 @@
         const upcoming = projects.filter(function (p) {
             return p.m >= 1 && (includeWait || !p.canWait);
         }).slice().sort(function (a, b) { return a.m - b.m; });
-        const shorts = upcoming.filter(function (p) { return !usesBond(p.m); });
-        const longs = upcoming.filter(function (p) { return usesBond(p.m); });
-        const shortItems = shorts.map(function (p) { return { name: p.name, rel: p.m, liable: p.liable }; });
-        const cashAssigned = Math.min(left, analyze(0, shortItems, rCash).pv);
-        left -= cashAssigned;
-        const cashPlan = analyze(cashAssigned, shortItems, rCash);
+        const annotated = upcoming.map(function (p) {
+            const bond = pickBond(p.m, bonds);
+            return {
+                name: p.name,
+                m: p.m,
+                liable: p.liable,
+                bond: bond,
+                rBond: bond ? Math.pow(1 + bond.annual, 1 / 12) - 1 : 0,
+                gap: bond ? p.m - bond.m : p.m
+            };
+        });
+        const cashItems = annotated.filter(function (p) { return !p.bond; });
+        const bondItems = annotated.filter(function (p) { return p.bond; });
         const parts = [];
-        if (cashPlan.savings > 1e-6) parts.push({ name: cashPlan.binding, savings: cashPlan.savings, vehicle: 'cash' });
-        longs.forEach(function (p) {
-            const spec = [{ name: p.name, rel: p.m, liable: p.liable }];
-            const assigned = Math.min(left, analyze(0, spec, rBond).pv);
+        const cashSolved = solveCash(cashItems, 0, rCash, tax);
+        const cashAssigned = Math.min(left, cashSolved.pv);
+        left -= cashAssigned;
+        const cashPlan = solveCash(cashItems, cashAssigned, rCash, tax);
+        if (cashPlan.savings > 1e-4) {
+            parts.push({ name: cashPlan.binding, savings: cashPlan.savings, vehicle: 'cash', cover: 'Tagesgeld' });
+        }
+        bondItems.forEach(function (p) {
+            const factors = streamFactors(p.m, p.bond.m, p.rBond, rCash, tax);
+            const quote = singleSavings(p.liable, 0, factors);
+            const assigned = Math.min(left, quote.pv);
             left -= assigned;
-            const plan = analyze(assigned, spec, rBond);
-            if (plan.savings > 1e-6) parts.push({ name: p.name, savings: plan.savings, vehicle: 'bond' });
+            const plan = singleSavings(p.liable, assigned, factors);
+            if (plan.savings > 1e-4) {
+                parts.push({
+                    name: p.name,
+                    savings: plan.savings,
+                    vehicle: 'bond',
+                    cover: coverText(p.bond, p.gap)
+                });
+            }
         });
         let savings = 0;
         let binding = null;
@@ -602,9 +793,14 @@
         return { savings: savings, binding: binding, parts: parts };
     }
 
+    function bondSum(longs) {
+        return longs.reduce(function (sum, p) { return sum + p.bal; }, 0);
+    }
+
     function simulate(projects, opts) {
         const rCash = opts.r;
-        const rBond = opts.rBond == null ? opts.r : opts.rBond;
+        const tax = opts.tax || 0;
+        const bonds = opts.bonds || [];
         const infM = opts.infM;
         const savings = opts.savings;
         const share = opts.etfShare;
@@ -612,6 +808,7 @@
         const start = opts.start;
         const returns = opts.returns;
         const items = projects.map(function (p) {
+            const bond = !p.canWait ? pickBond(p.m, bonds) : null;
             return {
                 name: p.name,
                 canWait: p.canWait,
@@ -623,33 +820,57 @@
                 paid: 0,
                 paidMonth: null,
                 done: false,
-                vehicle: (!p.canWait && usesBond(p.m)) ? 'bond' : 'cash',
-                bucket: 0
+                unpaid: false,
+                bal: 0,
+                taxable: 0,
+                bond: bond,
+                rBond: bond ? Math.pow(1 + bond.annual, 1 / 12) - 1 : 0,
+                bondUntil: bond ? bond.m : 0,
+                cover: !p.canWait ? coverText(bond, bond ? p.m - bond.m : 0) : ''
             };
         });
 
-        let cash = opts.wealth;
+        const cash = { bal: Math.max(0, opts.wealth), taxable: 0 };
         let etf = 0;
+        let etfBasis = 0;
+
+        function sellEtf(need) {
+            if (need <= 1e-8 || etf <= 1e-10) return 0;
+            const gain = Math.max(0, etf - etfBasis);
+            const netPer = 1 - tax * (gain / etf);
+            let gross = netPer > 1e-8 ? need / netPer : need;
+            if (gross > etf) gross = etf;
+            const f = gross / etf;
+            const taxDue = gain * f * tax;
+            etfBasis *= (1 - f);
+            etf -= gross;
+            return gross - taxDue;
+        }
 
         items.forEach(function (p) {
             if (p.m > 0 || p.done) return;
             if (!p.canWait) {
-                const paid = Math.min(cash + etf, p.liable);
-                const fromCash = Math.min(cash, paid);
-                cash -= fromCash;
-                etf -= (paid - fromCash);
-                p.paid = paid;
+                let need = p.liable;
+                const fromCash = withdrawNet(cash.bal, cash.taxable, need, tax);
+                cash.bal = fromCash.bal;
+                cash.taxable = fromCash.taxable;
+                need -= fromCash.net;
+                need -= sellEtf(need);
+                p.paid = p.liable - Math.max(0, need);
                 p.paidMonth = 0;
                 p.done = true;
             }
         });
         items.forEach(function (p) {
             if (p.m > 0 || p.done) return;
-            const paid = Math.min(cash + etf, p.liable);
-            if (paid + 1e-6 >= p.liable) {
-                const fromCash = Math.min(cash, p.liable);
-                cash -= fromCash;
-                etf -= (p.liable - fromCash);
+            const have = netOf(cash.bal, cash.taxable, tax) + (etf > 0 ? (etf - Math.max(0, etf - etfBasis) * tax) : 0);
+            if (have + 1e-6 >= p.liable) {
+                let need = p.liable;
+                const fromCash = withdrawNet(cash.bal, cash.taxable, need, tax);
+                cash.bal = fromCash.bal;
+                cash.taxable = fromCash.taxable;
+                need -= fromCash.net;
+                sellEtf(need);
                 p.paid = p.liable;
                 p.paidMonth = 0;
                 p.done = true;
@@ -660,94 +881,122 @@
             }
         });
 
-        const shorts = items.filter(function (p) { return !p.canWait && p.vehicle === 'cash'; });
-        const longs = items.filter(function (p) { return !p.canWait && p.vehicle === 'bond'; })
+        const longs = items.filter(function (p) { return !p.canWait && p.bond && !p.done; })
             .sort(function (a, b) { return a.originalMonth - b.originalMonth; });
+        const shorts = items.filter(function (p) { return !p.canWait && !p.bond && !p.done; });
+
+        function cashSpecs() {
+            return shorts.filter(function (p) { return !p.done && p.m >= 1; })
+                .map(function (p) { return { name: p.name, m: p.m, liable: p.liable }; });
+        }
+
+        const openingCash = solveCash(cashSpecs(), 0, rCash, tax);
+        const cashKeep = Math.min(cash.bal, openingCash.pv);
+        let rest = cash.bal - cashKeep;
+        cash.bal = cashKeep;
+        cash.taxable = 0;
+        longs.forEach(function (p) {
+            const factors = streamFactors(p.m, p.bondUntil, p.rBond, rCash, tax);
+            const pv = singleSavings(p.liable, 0, factors).pv;
+            const put = Math.min(rest, pv);
+            rest -= put;
+            p.bal = put;
+            p.taxable = 0;
+        });
+        etf += rest;
+        etfBasis += rest;
+
+        const locked = cash.bal + bondSum(longs);
+        if (share > 0 && locked > 0) {
+            const move = locked * share;
+            const scale = (locked - move) / locked;
+            cash.bal *= scale;
+            longs.forEach(function (p) { p.bal *= scale; });
+            etf += move;
+            etfBasis += move;
+        }
+
         const maxDue = items.reduce(function (mx, p) { return Math.max(mx, p.originalMonth); }, 0);
         const cap = Math.min(HORIZON_CAP, maxDue + extra);
         const path = [];
 
-        function shortSpecs(relOf) {
-            return shorts.filter(function (p) { return !p.done; })
-                .map(function (p) { return { name: p.name, rel: relOf(p), liable: p.liable }; })
-                .filter(function (p) { return p.rel >= 1 && p.liable > 0; });
-        }
-
-        function release(beforeGrowth, month) {
-            const relOf = function (p) { return beforeGrowth ? p.m - month + 1 : p.m - month; };
-            const cashPv = analyze(0, shortSpecs(relOf), rCash).pv;
-            if (cash > cashPv) {
-                etf += cash - cashPv;
-                cash = cashPv;
-            }
-            longs.forEach(function (p) {
-                if (p.done) return;
-                const rel = relOf(p);
-                if (rel < 1) return;
-                const pv = analyze(0, [{ name: p.name, rel: rel, liable: p.liable }], rBond).pv;
-                if (p.bucket > pv) {
-                    etf += p.bucket - pv;
-                    p.bucket = pv;
-                }
-            });
-        }
-
-        function hardNeeds(month) {
-            const needs = [];
-            const specs = shortSpecs(function (p) { return p.m - month + 1; });
-            const cashNeed = analyze(cash, specs, rCash).savings;
-            if (cashNeed > 1e-8) {
-                const soonest = specs.reduce(function (m, x) { return Math.min(m, x.rel); }, 1e9);
-                needs.push({ rel: soonest, vehicle: 'cash', amount: cashNeed, target: null });
-            }
-            longs.forEach(function (p) {
-                if (p.done) return;
-                const rel = p.m - month + 1;
-                if (rel < 1) return;
-                const need = analyze(p.bucket, [{ name: p.name, rel: rel, liable: p.liable }], rBond).savings;
-                if (need > 1e-8) needs.push({ rel: rel, vehicle: 'bond', amount: need, target: p });
-            });
-            needs.sort(function (a, b) { return a.rel - b.rel; });
-            return needs;
-        }
-
-        function take(available, need) {
-            const amount = Math.min(Math.max(available, 0), Math.max(need, 0));
-            return amount;
-        }
-
-        const shortPv0 = analyze(0, shortSpecs(function (p) { return p.m; }), rCash).pv;
-        const cashKeep = Math.min(cash, shortPv0);
-        let rest = cash - cashKeep;
-        cash = cashKeep;
-        longs.forEach(function (p) {
-            if (p.done) return;
-            const pv = analyze(0, [{ name: p.name, rel: p.m, liable: p.liable }], rBond).pv;
-            const put = Math.min(rest, pv);
-            rest -= put;
-            p.bucket = put;
-        });
-        etf += rest;
-        const locked = cash + bondSum(longs);
-        if (share > 0 && locked > 0) {
-            const move = locked * share;
-            const scale = (locked - move) / locked;
-            cash *= scale;
-            longs.forEach(function (p) { p.bucket *= scale; });
-            etf += move;
-        }
-
         function snapshot(month) {
-            return { month: month, cash: cash, bond: bondSum(longs), risky: etf, paid: [] };
+            return { month: month, cash: cash.bal, bond: bondSum(longs), risky: etf, paid: [] };
+        }
+        if (opts.record) path.push(snapshot(0));
+
+        function releasePot(state, monthsLeft, absStart, bondUntil, rBond, liable) {
+            if (monthsLeft < 1) return;
+            const idle = forwardNet(state.bal, state.taxable, monthsLeft, absStart, bondUntil, rBond, rCash, tax, 0);
+            const freed = releaseNet(state, idle, liable, tax);
+            if (freed > 0) {
+                etf += freed;
+                etfBasis += freed;
+            }
         }
 
-        if (opts.record) path.push(snapshot(0));
+        function releaseAll(absStart, monthsLeftOf) {
+            const specs = cashSpecs().filter(function (b) { return b.m >= absStart; });
+            if (specs.length === 1) {
+                const only = specs[0];
+                releasePot(cash, monthsLeftOf(only.m), absStart, 0, rCash, only.liable);
+            } else if (specs.length > 1 && cash.bal > 0) {
+                const idlePays = cashCanPay(specs.map(function (b) {
+                    return { name: b.name, m: b.m - absStart + 1, liable: b.liable };
+                }), cash.bal, 0, rCash, tax, absStart, cash.taxable).ok;
+                if (idlePays) {
+                    let lo = 0;
+                    let hi = netOf(cash.bal, cash.taxable, tax);
+                    for (let i = 0; i < 24; i++) {
+                        const mid = (lo + hi) / 2;
+                        const trial = withdrawNet(cash.bal, cash.taxable, mid, tax);
+                        const still = cashCanPay(specs.map(function (b) {
+                            return { name: b.name, m: b.m - absStart + 1, liable: b.liable };
+                        }), trial.bal, 0, rCash, tax, absStart, trial.taxable).ok;
+                        if (still) lo = mid;
+                        else hi = mid;
+                    }
+                    const taken = withdrawNet(cash.bal, cash.taxable, lo, tax);
+                    cash.bal = taken.bal;
+                    cash.taxable = taken.taxable;
+                    etf += taken.net;
+                    etfBasis += taken.net;
+                }
+            }
+            longs.forEach(function (p) {
+                if (p.done || p.m < absStart) return;
+                releasePot(p, monthsLeftOf(p.m), absStart, p.bondUntil, p.rBond, p.liable);
+            });
+        }
 
         let month = 0;
         while (month < cap) {
             month += 1;
-            release(true, month);
-            const needs = hardNeeds(month);
+            releaseAll(month, function (due) { return due - month + 1; });
+
+            const needs = [];
+            const specs = cashSpecs().filter(function (b) { return b.m >= month; });
+            if (specs.length) {
+                const shifted = specs.map(function (b) { return { name: b.name, m: b.m - month + 1, liable: b.liable }; });
+                const solved = { savings: 0 };
+                if (specs.length === 1) {
+                    solved.savings = additionalSavings(cash.bal, cash.taxable, shifted[0].m, month, 0, rCash, rCash, tax, shifted[0].liable);
+                } else {
+                    solved.savings = solveCash(shifted, cash.bal, rCash, tax, month, cash.taxable).savings;
+                }
+                if (solved.savings > 1e-6) {
+                    const soonest = shifted.reduce(function (m, x) { return Math.min(m, x.m); }, 1e9);
+                    needs.push({ rel: soonest, amount: solved.savings, target: cash });
+                }
+            }
+            longs.forEach(function (p) {
+                if (p.done || p.m < month) return;
+                const leftMonths = p.m - month + 1;
+                const need = additionalSavings(p.bal, p.taxable, leftMonths, month, p.bondUntil, p.rBond, rCash, tax, p.liable);
+                if (need > 1e-6) needs.push({ rel: leftMonths, amount: need, target: p });
+            });
+            needs.sort(function (a, b) { return a.rel - b.rel; });
+
             let room = savings;
             needs.forEach(function (need) {
                 need.taken = Math.min(room, need.amount);
@@ -756,55 +1005,68 @@
             const hardTaken = savings - room;
             const keep = 1 - share;
             needs.forEach(function (need) {
-                const kept = need.taken * keep;
-                if (need.vehicle === 'cash') cash += kept;
-                else need.target.bucket += kept;
+                need.target.bal += need.taken * keep;
             });
-            etf += room + hardTaken * share;
+            const toEtf = room + hardTaken * share;
+            etf += toEtf;
+            etfBasis += toEtf;
 
             const eqIndex = start + month - 1;
             const eq = eqIndex >= 0 && eqIndex < returns.length ? returns[eqIndex] : null;
             if (eq == null || eq <= -1) break;
-            cash *= (1 + rCash);
+
+            const grownCash = stepAccount(cash.bal, cash.taxable, 0, rCash, tax, month % 12 === 0);
+            cash.bal = grownCash.bal;
+            cash.taxable = grownCash.taxable;
             longs.forEach(function (p) {
-                if (!p.done) p.bucket *= (1 + rBond);
+                if (p.done) return;
+                const grown = stepAccount(p.bal, p.taxable, 0, rateFor(month, p.bondUntil, p.rBond, rCash), tax, month % 12 === 0);
+                p.bal = grown.bal;
+                p.taxable = grown.taxable;
             });
             etf *= (1 + eq);
-            if (cash < 0) cash = 0;
+            if (cash.bal < 0) cash.bal = 0;
             if (etf < 0) etf = 0;
-            longs.forEach(function (p) { if (p.bucket < 0) p.bucket = 0; });
+            longs.forEach(function (p) { if (p.bal < 0) p.bal = 0; });
 
             const paidNames = [];
             items.forEach(function (p) {
                 if (p.done || p.canWait || p.m !== month) return;
                 let need = p.liable;
-                if (p.vehicle === 'bond') {
-                    const fromBond = take(p.bucket, need);
-                    p.bucket -= fromBond;
-                    need -= fromBond;
+                if (p.bond) {
+                    const fromBond = withdrawNet(p.bal, p.taxable, need, tax);
+                    p.bal = fromBond.bal;
+                    p.taxable = fromBond.taxable;
+                    need -= fromBond.net;
                 }
-                const fromCash = take(cash, need);
-                cash -= fromCash;
-                need -= fromCash;
-                const fromEtf = take(etf, need);
-                etf -= fromEtf;
-                need -= fromEtf;
-                p.paid = p.liable - need;
+                const fromCash = withdrawNet(cash.bal, cash.taxable, need, tax);
+                cash.bal = fromCash.bal;
+                cash.taxable = fromCash.taxable;
+                need -= fromCash.net;
+                need -= sellEtf(Math.max(0, need));
+                p.paid = p.liable - Math.max(0, need);
                 p.paidMonth = month;
                 p.done = true;
                 paidNames.push(p.name);
             });
 
-            release(false, month);
+            releaseAll(month + 1, function (due) { return due - month; });
             items.forEach(function (p) {
                 if (p.done || !p.canWait || p.m > month) return;
-                const surplus = Math.max(0, cash - analyze(0, shortSpecs(function (h) { return h.m - month; }), rCash).pv);
-                if (etf + surplus + 1e-6 >= p.liable) {
+                const specsLeft = cashSpecs().filter(function (h) { return h.m > month; });
+                const reserved = specsLeft.length ? solveCash(specsLeft.map(function (h) {
+                    return { name: h.name, m: h.m - month, liable: h.liable };
+                }), 0, rCash, tax, month + 1, 0).pv : 0;
+                const surplus = Math.max(0, netOf(cash.bal, cash.taxable, tax) - reserved);
+                const etfNet = etf - Math.max(0, etf - etfBasis) * tax;
+                if (etfNet + surplus + 1e-4 >= p.liable) {
                     let need = p.liable;
-                    const fromEtf = take(etf, need);
-                    etf -= fromEtf;
-                    need -= fromEtf;
-                    cash -= need;
+                    need -= sellEtf(need);
+                    if (need > 1e-6) {
+                        const fromCash = withdrawNet(cash.bal, cash.taxable, need, tax);
+                        cash.bal = fromCash.bal;
+                        cash.taxable = fromCash.taxable;
+                    }
                     p.paid = p.liable;
                     p.paidMonth = month;
                     p.done = true;
@@ -856,6 +1118,7 @@
             }
         });
 
+        const etfAfterTax = etf - Math.max(0, etf - etfBasis) * tax;
         return {
             path: path,
             projects: items,
@@ -863,13 +1126,15 @@
             flexOnTime: flexIdeal > 0 ? flexOn / flexIdeal : 1,
             hardMin: hardCount ? hardMin : 1,
             delay: maxDelay,
-            terminal: cash + bondSum(longs) + etf,
+            terminal: netOf(cash.bal, cash.taxable, tax) + longs.reduce(function (sum, p) {
+                return sum + netOf(p.bal, p.taxable, tax);
+            }, 0) + etfAfterTax,
             openingSavings: null
         };
     }
 
-    function monthOneSplit(projects, wealth, savings, rCash, rBond, etfShare) {
-        const plan = matchedPlan(projects, wealth, rCash, rBond, false);
+    function monthOneSplit(projects, wealth, savings, rCash, bonds, tax, etfShare) {
+        const plan = matchedPlan(projects, wealth, rCash, bonds, tax, false);
         let room = savings;
         let toCash = 0;
         let toBond = 0;
@@ -906,11 +1171,14 @@
     }
 
     function readControls() {
+        let tax = parseFloat(taxEl.value);
+        if (!isFinite(tax) || tax < 0) tax = 0;
+        if (tax > 50) tax = 50;
         return {
             savings: parseFloat(savingsEl.value),
             wealth: parseFloat(savedEl.value),
             rateAnnual: parseFloat(rateEl.value) / 100,
-            bondAnnual: parseFloat(bondEl.value) / 100,
+            tax: tax / 100,
             inflation: parseFloat(inflationEl.value) / 100,
             etfShare: parseFloat(etfEl.value) / 100
         };
@@ -920,9 +1188,24 @@
         document.getElementById('savings-val').textContent = fmtEuro(c.savings);
         document.getElementById('saved-val').textContent = fmtEuro(c.wealth);
         document.getElementById('safe-val').textContent = fmtPct(parseFloat(rateEl.value));
-        document.getElementById('bond-val').textContent = fmtPct(parseFloat(bondEl.value));
+        document.getElementById('tax-val').textContent = (Math.round(c.tax * 100000) / 1000) + '%';
         document.getElementById('inflation-val').textContent = fmtPct(parseFloat(inflationEl.value));
         document.getElementById('etf-val').textContent = Math.round(c.etfShare * 100) + '%';
+    }
+
+    function readBonds() {
+        const asOf = asOfToday();
+        const list = [];
+        bondBody.querySelectorAll('tr').forEach(function (tr) {
+            const name = tr.querySelector('.name').value.trim() || 'Obligation';
+            const y = parseNumber(tr.querySelector('.yield').value);
+            const due = parseYearMonth(tr.querySelector('.due').value);
+            if (y == null || y < 0 || !due) return;
+            const m = monthsUntil(asOf, due);
+            if (m < 1 || m > HORIZON_CAP) return;
+            list.push({ name: name, m: m, annual: y / 100, due: due });
+        });
+        return list;
     }
 
     function readProjects(inflation) {
@@ -967,12 +1250,12 @@
         return best;
     }
 
-    function hardPlan(projects, wealth, rCash, rBond) {
-        return matchedPlan(projects, wealth, rCash, rBond, false);
+    function hardPlan(projects, wealth, rCash, bonds, tax) {
+        return matchedPlan(projects, wealth, rCash, bonds, tax, false);
     }
 
-    function allPlan(projects, wealth, rCash, rBond) {
-        return matchedPlan(projects, wealth, rCash, rBond, true);
+    function allPlan(projects, wealth, rCash, bonds, tax) {
+        return matchedPlan(projects, wealth, rCash, bonds, tax, true);
     }
 
     function schedule() {
@@ -985,11 +1268,11 @@
         paintControlLabels(c);
         const loaded = readProjects(c.inflation);
         const projects = loaded.projects;
+        const bonds = readBonds();
         const r = Math.pow(1 + c.rateAnnual, 1 / 12) - 1;
-        const rBond = Math.pow(1 + c.bondAnnual, 1 / 12) - 1;
         const infM = Math.pow(1 + c.inflation, 1 / 12) - 1;
-        const hard = hardPlan(projects, c.wealth, r, rBond);
-        const all = allPlan(projects, c.wealth, r, rBond);
+        const hard = hardPlan(projects, c.wealth, r, bonds, c.tax);
+        const all = allPlan(projects, c.wealth, r, bonds, c.tax);
 
         if (state.boot) {
             state.boot = false;
@@ -1038,7 +1321,8 @@
                 wealth: c.wealth,
                 savings: c.savings,
                 r: r,
-                rBond: rBond,
+                tax: c.tax,
+                bonds: bonds,
                 infM: infM,
                 etfShare: c.etfShare,
                 extra: extra,
@@ -1051,7 +1335,7 @@
         state.windows = windows;
         state.asOf = loaded.asOf;
         state.projects = projects;
-        state.params = { c: c, r: r, rBond: rBond, infM: infM, extra: extra, returns: returns, series: series, hard: hard, all: all, projects: projects, asOf: loaded.asOf };
+        state.params = { c: c, r: r, tax: c.tax, bonds: bonds, infM: infM, extra: extra, returns: returns, series: series, hard: hard, all: all, projects: projects, asOf: loaded.asOf };
 
         const hardCovered = windows.length ? windows.filter(function (w) { return w.hardMin >= 1 - 1e-6; }).length / windows.length : 1;
         const flexCovered = windows.length ? windows.reduce(function (sum, w) { return sum + (w.flexOnTime || 0); }, 0) / windows.length : 1;
@@ -1083,7 +1367,7 @@
             meta.innerHTML = '';
             return;
         }
-        const split = monthOneSplit(state.projects, c.wealth, c.savings, state.params.r, state.params.rBond, c.etfShare);
+        const split = monthOneSplit(state.projects, c.wealth, c.savings, state.params.r, state.params.bonds, state.params.tax, c.etfShare);
         const hardCls = c.savings + 0.5 >= hard.savings ? 'ok' : 'short';
         let hardText;
         const piece = hard.binding ? ' ' + escapeHtml(hard.binding) + ' is the largest piece.' : '';
@@ -1102,7 +1386,15 @@
         if (split.toCash >= 1) bits.push('<strong>' + fmtEuro(split.toCash) + '</strong> into Tagesgeld');
         if (split.toEtf >= 1) bits.push('<strong>' + fmtEuro(split.toEtf) + '</strong> into the ETF');
         let flow = bits.length ? 'At the start, the monthly saving puts ' + bits.join(', ') + '.' : 'The monthly saving goes to the ETF. Savings already in hand cover the hard dates.';
-        if (c.etfShare > 0) flow += ' ' + Math.round(c.etfShare * 100) + '% of the hard-date saving is bought as ETF instead of an obligation.';
+        if (c.etfShare > 0) flow += ' ' + Math.round(c.etfShare * 100) + '% of the hard-date saving is bought as ETF.';
+        const locks = (hard.parts || []).filter(function (part) { return part.vehicle === 'bond'; });
+        let lockText = '';
+        if (locks.length) {
+            lockText = locks.map(function (part) {
+                return escapeHtml(part.name) + ' is matched to ' + escapeHtml(part.cover);
+            }).join('. ') + '.';
+        }
+        const taxText = 'Interest on Tagesgeld and on obligations is taxed at ' + (Math.round(c.tax * 100000) / 1000) + '% each year. The ETF is taxed on its gain when the shares are sold.';
         let cover = '';
         if (windows.length > 1) {
             cover = 'Hard dates clear in <strong class="' + (hardCovered > 0.999 ? 'ok' : 'short') + '">' + Math.round(hardCovered * 100) + '%</strong> of start months.';
@@ -1110,7 +1402,7 @@
                 cover += ' Projects that can wait are on time in <strong class="' + (flexCovered > 0.999 ? 'ok' : 'short') + '">' + Math.round(flexCovered * 100) + '%</strong> of them.';
             }
         }
-        meta.innerHTML = [hardText, allText, flow, cover].filter(Boolean).map(function (line) {
+        meta.innerHTML = [hardText, allText, flow, lockText, taxText, cover].filter(Boolean).map(function (line) {
             return '<div class="' + hardCls + '">' + line + '</div>';
         }).join('');
         meta.querySelectorAll('div').forEach(function (el, i) {
@@ -1136,7 +1428,8 @@
             wealth: p.c.wealth,
             savings: p.c.savings,
             r: p.r,
-            rBond: p.rBond,
+            tax: p.tax,
+            bonds: p.bonds,
             infM: p.infM,
             etfShare: p.c.etfShare,
             extra: p.extra,
@@ -1169,7 +1462,8 @@
                 else if (proj.unpaid) tail = '<span class="short">unpaid</span>';
                 else if (proj.canWait && proj.delay > 0) tail = '<span class="short">paid ' + proj.delay + ' months late</span>, at ' + fmtEuro(proj.liable);
                 else tail = '<span class="short">short ' + fmtEuro(proj.ideal - proj.paid) + '</span>';
-                return '<li>' + escapeHtml(proj.name) + ' — ' + fmtEuro(proj.ideal) + ' in ' + when + ' — ' + tail + '</li>';
+                const via = proj.cover ? ' — matched to ' + escapeHtml(proj.cover) : '';
+                return '<li>' + escapeHtml(proj.name) + ' — ' + fmtEuro(proj.ideal) + ' in ' + when + via + ' — ' + tail + '</li>';
             }).join('');
         drawWealth(sim.path);
         markCoverage();
@@ -1490,6 +1784,59 @@
         return histories;
     }
 
+    function addBond(row) {
+        const tr = document.createElement('tr');
+        const asOf = asOfToday();
+        const due = row && row.due ? fmtYm(row.due) : fmtYm(addMonths(asOf, 60));
+        const name = row && row.name ? row.name : 'Obligation';
+        const y = row && row.yield != null ? row.yield : 3;
+        tr.innerHTML =
+            '<td><input class="name" type="text" aria-label="Obligation name" value="' + escapeHtml(name) + '"></td>' +
+            '<td><input class="yield" type="number" min="0" max="20" step="0.01" aria-label="Yield percent" value="' + y + '"></td>' +
+            '<td><input class="due" type="month" aria-label="Maturity month" value="' + due + '"></td>' +
+            '<td class="x"><button type="button" class="remove" aria-label="Remove ' + escapeHtml(name) + '">×</button></td>';
+        bondBody.appendChild(tr);
+    }
+
+    function replaceBonds(list) {
+        bondBody.innerHTML = '';
+        if (!list.length) addBond(null);
+        list.forEach(function (b) { addBond(b); });
+        schedule();
+    }
+
+    function bondsFromRows(rows) {
+        if (!rows.length) throw new Error('The CSV is empty.');
+        const headers = rows[0].map(normHeader);
+        const nameCol = headerIndex(headers, NAME_H);
+        const yieldCol = headerIndex(headers, YIELD_H);
+        const dueCol = headerIndex(headers, DUE_H);
+        if (yieldCol === -1 || dueCol === -1) throw new Error('Obligation CSV needs yield and due columns.');
+        const list = [];
+        for (let r = 1; r < rows.length; r++) {
+            const y = parseNumber(rows[r][yieldCol]);
+            const due = parseYearMonth(rows[r][dueCol]);
+            if (y == null || y < 0 || !due) continue;
+            list.push({
+                name: nameCol === -1 ? 'Obligation' : (rows[r][nameCol].trim() || 'Obligation'),
+                yield: y,
+                due: due
+            });
+        }
+        if (!list.length) throw new Error('No obligation rows with a yield and a maturity.');
+        return list;
+    }
+
+    function defaultObligations() {
+        return [
+            { name: 'Bund Oct 2027', yield: '2.94', due: { y: 2027, m: 10 } },
+            { name: 'Bund Apr 2029', yield: '3.10', due: { y: 2029, m: 4 } },
+            { name: 'Bund Oct 2031', yield: '3.23', due: { y: 2031, m: 10 } },
+            { name: 'Bund Nov 2033', yield: '3.35', due: { y: 2033, m: 11 } },
+            { name: 'Bund Aug 2036', yield: '3.47', due: { y: 2036, m: 8 } }
+        ];
+    }
+
     function projectsFromRows(rows) {
         if (!rows.length) throw new Error('The CSV is empty.');
         const headers = rows[0].map(normHeader);
@@ -1523,6 +1870,9 @@
             if (looksLikeProjects(headers)) {
                 replaceProjects(projectsFromRows(rows));
                 status.textContent = 'Loaded ' + tbody.querySelectorAll('tr').length + ' projects' + (label ? ' from ' + label : '') + '.';
+            } else if (looksLikeBonds(headers)) {
+                replaceBonds(bondsFromRows(rows));
+                status.textContent = 'Loaded ' + bondBody.querySelectorAll('tr').length + ' obligations' + (label ? ' from ' + label : '') + '.';
             } else {
                 const loaded = historiesFromRows(rows);
                 const illustrated = state.histories.filter(function (h) { return h.illustrated; });
@@ -1582,34 +1932,62 @@
             { name: 'b', canWait: false, m: 5, liable: 100 }
         ];
         const sim = simulate(projects, {
-            wealth: 0, savings: 50, r: 0, rBond: 0, infM: 0, etfShare: 0, extra: 0,
+            wealth: 0, savings: 50, r: 0, tax: 0, bonds: [], infM: 0, etfShare: 0, extra: 0,
             start: 0, returns: [0, 0, 0, 0, 0], record: false
         });
         sim.projects.forEach(function (p) {
             if (p.paid + 1e-6 < p.ideal) throw new Error('Flat saving did not pay the hard bills.');
         });
+        const listed = [{ name: 'five', m: 60, annual: 0.03 }];
         const bondOnly = matchedPlan([
             { name: 'kitchen', canWait: false, m: 60, liable: 1000 }
-        ], 0, 0, 0.01, false);
+        ], 0, 0, listed, 0, false);
         const cashRate = matchedPlan([
             { name: 'kitchen', canWait: false, m: 60, liable: 1000 }
-        ], 0, 0, 0, false);
+        ], 0, 0, [], 0, false);
         if (!(bondOnly.savings < cashRate.savings - 1e-6)) throw new Error('Obligation yield did not lower the monthly amount.');
+        if (bondOnly.parts[0].vehicle !== 'bond') throw new Error('A bond maturing on the bill was not used.');
+        const laterOnly = matchedPlan([
+            { name: 'kitchen', canWait: false, m: 60, liable: 1000 }
+        ], 0, 0, [{ name: 'long', m: 120, annual: 0.05 }], 0, false);
+        if (laterOnly.parts.length && laterOnly.parts[0].vehicle === 'bond') throw new Error('A bond maturing after the bill was used.');
+        const taxed = matchedPlan([
+            { name: 'kitchen', canWait: false, m: 60, liable: 1000 }
+        ], 0, 0, listed, 0.25, false);
+        if (!(taxed.savings > bondOnly.savings + 1e-6)) throw new Error('Yearly tax did not raise the monthly amount.');
+        const twoBonds = [
+            { name: 'car', m: 24, annual: 0 },
+            { name: 'kitchen', m: 60, annual: 0 }
+        ];
         const bonds = matchedPlan([
             { name: 'car', canWait: false, m: 24, liable: 120 },
             { name: 'kitchen', canWait: false, m: 60, liable: 300 }
-        ], 0, 0, 0, false);
+        ], 0, 0, twoBonds, 0, false);
         const crash = new Array(60).fill(-0.2);
         const separated = simulate([
             { name: 'car', canWait: false, m: 24, liable: 120 },
             { name: 'kitchen', canWait: false, m: 60, liable: 300 }
         ], {
-            wealth: 0, savings: bonds.savings, r: 0, rBond: 0, infM: 0, etfShare: 0, extra: 0,
+            wealth: 0, savings: bonds.savings, r: 0, tax: 0, bonds: twoBonds, infM: 0, etfShare: 0, extra: 0,
             start: 0, returns: crash, record: false
         });
         separated.projects.forEach(function (p) {
             if (p.paid + 1e-4 < p.ideal) throw new Error('Matched obligations did not pay through a crash.');
         });
+        const taxedSale = simulate([
+            { name: 'later', canWait: true, m: 1, liable: 160 }
+        ], {
+            wealth: 100, savings: 0, r: 0, tax: 0.5, bonds: [], infM: 0, etfShare: 0, extra: 0,
+            start: 0, returns: [1], record: false
+        });
+        const freeSale = simulate([
+            { name: 'later', canWait: true, m: 1, liable: 160 }
+        ], {
+            wealth: 100, savings: 0, r: 0, tax: 0, bonds: [], infM: 0, etfShare: 0, extra: 0,
+            start: 0, returns: [1], record: false
+        });
+        if (!taxedSale.projects[0].unpaid) throw new Error('ETF gain was spent without tax.');
+        if (freeSale.projects[0].paid + 1e-4 < 160) throw new Error('Untaxed ETF should have paid the bill.');
     }
 
     tbody.addEventListener('input', schedule);
@@ -1623,11 +2001,25 @@
         schedule();
     });
 
+    bondBody.addEventListener('input', schedule);
+    bondBody.addEventListener('change', schedule);
+    bondBody.addEventListener('click', function (e) {
+        const btn = e.target.closest('button.remove');
+        if (!btn) return;
+        btn.closest('tr').remove();
+        if (!bondBody.querySelector('tr')) addBond(null);
+        schedule();
+    });
+    document.getElementById('add-bond').addEventListener('click', function () {
+        addBond(null);
+        schedule();
+    });
+
     document.getElementById('add-project').addEventListener('click', function () {
         addRow(null);
         schedule();
     });
-    [savingsEl, savedEl, rateEl, bondEl, inflationEl, etfEl].forEach(function (el) {
+    [savingsEl, savedEl, rateEl, taxEl, inflationEl, etfEl].forEach(function (el) {
         el.addEventListener('input', schedule);
     });
     seriesEl.addEventListener('change', schedule);
@@ -1688,6 +2080,7 @@
     }
 
     defaultProjects().forEach(addRow);
+    defaultObligations().forEach(addBond);
     state.histories = [illustratedHistory()];
     fillSeriesSelect(0);
     recompute();
