@@ -8,9 +8,9 @@ tags:
   - liability
 ---
 
-Every few years, software engineering attempts to formalize itself by borrowing metaphors from physical manufacturing. We talk about assembly lines, blueprints, tooling, and factories. Claude, Codex, Opencode, and any other harnesses may be seen as a versatile "Software Factory", supporting vibe coding or AI assisted coded. For fun project, aka non-productive project, these are powerfull multiplicator; but for productive applications within a company which may interacts with other system, it does not seem to be their yet. Non technical users needs potentially a stricter more opiniated set-up.
+Every few years, software engineering attempts to formalize itself by borrowing metaphors from physical manufacturing. We talk about assembly lines, blueprints, tooling, and factories. Claude, Codex, Opencode, and any other harnesses may be seen as a versatile "Software Factory", supporting vibe coding or AI-assisted coding. For fun projects, aka non-productive projects, these are powerful multipliers; but for productive applications within a company which may interact with other systems, it does not seem to be there yet. Non-technical users potentially need a stricter, more opinionated setup.
 
-By wrapping modern AI harnesses (Claude, Codex, Antigravity, etc.) in an opinionated harness of software engineering practices, including but limited to DDD (Domain driven developments), BDD (Behavior-Driven Development), Example Mapping, OpenSpecs, Event Modeling, continuous integration, and strict test runners, we theoretically create a "safe sandbox." Within this sandbox, business managers, domain experts, and non-devs can build working software without shooting themselves in the foot at some point during building or productive usage.
+By wrapping modern AI harnesses (Claude, Codex, Antigravity, etc.) in an opinionated harness of software engineering practices, including but not limited to DDD (Domain-Driven Design), BDD (Behavior-Driven Development), Example Mapping, OpenSpecs, Event Modeling, continuous integration, and strict test runners, we theoretically create a "safe sandbox." Within this sandbox, business managers, domain experts, and non-devs can build working software without shooting themselves in the foot at some point during building or productive usage.
 
 It sounds like the holy grail of democratized software development. But there is a fundamental flaw in how we think about rule-bending, AI, and engineering guarantees.
 
@@ -21,19 +21,19 @@ Unlike civil or mechanical engineering, software engineering is rarely a hard sc
 - **Rule:** Never write tight coupling between modules.
 - **Senior Dev Reality:** "Except in this isolated micro-service hotpath where network latency is killing us, so we'll inline this contract for now."
 - **Rule:** Always stick to strict BDD and write specs first.
-- **Senior Dev Reality:** "Except for this exploratory work where we don't know what the data structure looks like yet, and need to clarify "
+- **Senior Dev Reality:** "Except for this exploratory work where we don't know what the data structure looks like yet, and need to clarify."
 
-*Note you might differ in opinion, and I will as well in some cases*.
+*Note: you might differ in opinion, and I will as well in some cases.*
 
-A senior software engineer isn't just someone who knows the rules; they are someone who knows when, where, and how far the rules can be bent without destroying the system. They understand the implication of rule bending and are willing to take this risks.
+A senior software engineer isn't just someone who knows the rules; they are someone who knows when, where, and how far the rules can be bent without destroying the system. They understand the implications of rule-bending and are willing to take these risks.
 
-Now, bring LLMs into the picture. AI harnesses excel at pattern matching, and if you allow them to bend rule they may bend the bended rules. When an AI encounters a tricky constraint or an edge case, it doesn't bend the rule with surgical precision. It writes shortcuts, bypasses guarantees, or silently breaks invariants across boundary lines.
+Now, bring LLMs into the picture. AI harnesses excel at pattern matching, and if you allow them to bend rules they may bend the bent rules. When an AI encounters a tricky constraint or an edge case, it doesn't bend the rule with surgical precision. It writes shortcuts, bypasses guarantees, or silently breaks invariants across boundary lines.
 
-In many current AI Dev Stack (skills, agents, workbench or harnesses), we have an explosion of enabling tools but almost no guaranteeing tools (except perhaps some well designed hooks and CI/CD). 
+In many current AI Dev Stacks (skills, agents, workbenches, or harnesses), we have an explosion of enabling tools but almost no guaranteeing tools (except perhaps some well-designed hooks and CI/CD).
 
 ### What Happens When You Try to Build an Airplane in a Bicycle Factory?
 
-Let's go back to a physical world analogy for a moment. Imagine a physical factory designed to manufacture bicycles.
+Let's go back to a physical-world analogy for a moment. Imagine a physical factory designed to manufacture bicycles.
 
 It has specialized tooling: jig setups for welding steel or carbon frames, tensioners for spoked wheels, alignment rigs for derailleur gears. The processes are clear, the tolerance limits are established, and the safety specs are defined and approved.
 
@@ -72,8 +72,6 @@ To make this explicit, every AI software factory needs a Contract of Liability:
                                                 to rescue you."
 ```
 
-
-
 ### The Rule of the Waiver
 
 **Inside the Guarantee Zone:** The software factory provides high-friction guardrails (BDD specs, rigid example mapping, pre-built domain events, automated regression suites). If the user stays within these parameters, the factory guarantees functional continuity.
@@ -83,8 +81,6 @@ To make this explicit, every AI software factory needs a Contract of Liability:
 If the user insists on proceeding outside the factory's proven operational capabilities, they must digitally "sign" a contract of liability:
 
 > You are stepping outside the factory's verified capabilities. By continuing, you acknowledge that you are bending engineering rules without architectural safety nets. Software Engineering will not come to the rescue when things break.
-
-
 
 ### Conclusion: Engineering is Boundary Management
 
